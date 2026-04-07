@@ -1,4 +1,4 @@
-import { NodeConnectionTypes, type INodeType, type INodeTypeDescription } from 'n8n-workflow';
+import { ILoadOptionsFunctions, INodeListSearchResult, NodeConnectionTypes, type INodeType, type INodeTypeDescription } from 'n8n-workflow';
 import { itemDescription } from './resources/item';
 import { referenceDataDescription } from './resources/referenceData';
 
@@ -37,10 +37,10 @@ export class Bloomflow implements INodeType {
 						value: 'item',
 					},
 					{
-                        name: 'Reference Data',
-                        value: 'referenceData',
-                    },
-					
+						name: 'Reference Data',
+						value: 'referenceData',
+					},
+
 				],
 				default: 'item',
 			},
@@ -48,5 +48,45 @@ export class Bloomflow implements INodeType {
 			...referenceDataDescription
 
 		],
+	};
+
+	methods = {
+		listSearch: {
+			async getTypologies(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const credentials = await this.getCredentials('bloomflowApi');
+
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items/reference_data`,
+						json: true,
+					},
+				);
+
+				const typologies: Array<{ id: string; name: string }> =
+					Array.isArray(response)
+						? response.flatMap((r: { typologies?: Array<{ id: string; name: string }> }) => r.typologies ?? [])
+						: response?.typologies ?? [];
+
+				const results = typologies
+					.filter((t) =>
+						filter
+							? t.name.toLowerCase().includes(filter.toLowerCase()) ||
+							t.id.toLowerCase().includes(filter.toLowerCase())
+							: true,
+					)
+					.map((t) => ({
+						name: `${t.name} (${t.id})`,
+						value: t.id,
+					}));
+
+				return { results };
+			},
+		},
 	};
 }

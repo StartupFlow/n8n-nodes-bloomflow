@@ -15,9 +15,10 @@ export const itemCreateDescription: INodeProperties[] = [
         },
     },
     {
-        displayName: 'Typology ID',
-        name: 'typologyId',
-        type: 'string',
+        displayName: 'Typology',
+        name: 'typology',
+        type: 'resourceLocator',
+        default: { mode: 'list', value: '' },
         required: true,
         displayOptions: {
             show: {
@@ -25,11 +26,31 @@ export const itemCreateDescription: INodeProperties[] = [
                 operation: ['create'],
             },
         },
-        default: '',
-        description: 'The typology of the item, e.g. <code>startup</code>',
+        description: 'The typology to filter items by',
+        modes: [
+            {
+                displayName: 'From List',
+                name: 'list',
+                type: 'list',
+                typeOptions: {
+                    searchListMethod: 'getTypologies',
+                    searchable: true,
+                    searchFilterRequired: false,
+                },
+            },
+            {
+                displayName: 'ID',
+                name: 'id',
+                type: 'string',
+                hint: 'Enter a typology ID, e.g. startup',
+                placeholder: 'startup'
+            },
+        ],
         routing: {
             request: {
-                body: { typologyId: '={{ $value }}' },
+                qs: {
+                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
+                },
             },
         },
     },

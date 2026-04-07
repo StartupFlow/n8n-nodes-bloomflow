@@ -6,20 +6,39 @@ export const itemListDescription: INodeProperties[] = [
     {
         displayName: 'Typology',
         name: 'typology',
-        type: 'string',
+        type: 'resourceLocator',
+        default: { mode: 'list', value: '' },
         required: true,
         displayOptions: {
             show: {
                 resource: ['item'],
-                operation: ['list'],
+                operation: ['list']
             },
         },
-        default: '',
-        description: 'Comma-separated typology values, e.g. <code>startup, investor</code>. Sent as a JSON array.',
+        description: 'The typology to filter items by',
+        modes: [
+            {
+                displayName: 'From List',
+                name: 'list',
+                type: 'list',
+                typeOptions: {
+                    searchListMethod: 'getTypologies',
+                    searchable: true,
+                    searchFilterRequired: false,
+                },
+            },
+            {
+                displayName: 'ID',
+                name: 'id',
+                type: 'string',
+                hint: 'Enter a typology ID, e.g. startup',
+                placeholder: 'startup'
+            },
+        ],
         routing: {
             request: {
                 qs: {
-                    typology: '={{ JSON.stringify($value.split(",").map(v => v.trim()).filter(Boolean)) }}',
+                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
                 },
             },
         },
