@@ -69,9 +69,8 @@ export const itemDescription: INodeProperties[] = [
         ],
         default: 'list',
     },
-
-    ...itemCreateDescription,
-    ...itemGetDescription,
     ...itemListDescription,
+    ...itemGetDescription,
+    ...itemCreateDescription,
     ...itemUpdateDescription,
 ];

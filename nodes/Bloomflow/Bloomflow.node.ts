@@ -87,6 +87,57 @@ export class Bloomflow implements INodeType {
 
 				return { results };
 			},
+			async searchItems(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const typologyParam = this.getCurrentNodeParameter('typology') as
+					| string
+					| { value: string };
+
+				const typology =
+					typeof typologyParam === 'object'
+						? typologyParam?.value
+						: typologyParam;
+
+				if (!typology) {
+					return { results: [] };
+				}
+
+				const credentials = await this.getCredentials('bloomflowApi');
+
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items`,
+						qs: {
+							typology: JSON.stringify([typology]),
+							limit: 50,
+						},
+						json: true,
+					},
+				);
+
+				const data = Array.isArray(response) ? response[0] : response;
+
+				const items = data?.results ?? [];
+
+				const results = items
+					.filter((item: any) =>
+						filter
+							? item.name?.toLowerCase().includes(filter.toLowerCase()) ||
+							item.id?.toLowerCase().includes(filter.toLowerCase())
+							: true,
+					)
+					.map((item: any) => ({
+						name: `${item.name || 'Unnamed'} (${item.id})`,
+						value: item.id,
+					}));
+
+				return { results };
+			}
 		},
 	};
 }

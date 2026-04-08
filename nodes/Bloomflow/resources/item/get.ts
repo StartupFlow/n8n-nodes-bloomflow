@@ -1,10 +1,51 @@
 import type { INodeProperties } from 'n8n-workflow';
 
 export const itemGetDescription: INodeProperties[] = [
+        {
+        displayName: 'Typology',
+        name: 'typology',
+        type: 'resourceLocator',
+        default: { mode: 'list', value: '' },
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['item'],
+                operation: ['get'],
+                '/itemId.mode': ['list'], 
+            },
+        },
+        description: 'The typology to filter items by',
+        modes: [
+            {
+                displayName: 'From List',
+                name: 'list',
+                type: 'list',
+                typeOptions: {
+                    searchListMethod: 'getTypologies',
+                    searchable: true,
+                    searchFilterRequired: false,
+                },
+            },
+            {
+                displayName: 'ID',
+                name: 'id',
+                type: 'string',
+                hint: 'Enter a typology ID, e.g. startup',
+                placeholder: 'startup'
+            },
+        ],
+        routing: {
+            request: {
+                qs: {
+                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
+                },
+            },
+        },
+    },
     {
-        displayName: 'Item ID',
+        displayName: 'Item',
         name: 'itemId',
-        type: 'string',
+        type: 'resourceLocator',
         required: true,
         displayOptions: {
             show: {
@@ -12,12 +53,39 @@ export const itemGetDescription: INodeProperties[] = [
                 operation: ['get'],
             },
         },
-        default: '',
-        description: 'The ID of the item to retrieve',
+        default: { mode: 'id', value: '' },
+        modes: [
+            {
+                displayName: 'Select from List',
+                name: 'list',
+                type: 'list',
+                placeholder: 'Select an item...',
+                typeOptions: {
+                    searchListMethod: 'searchItems',
+                    searchable: true,
+                },
+            },
+            {
+                displayName: 'By ID',
+                name: 'id',
+                type: 'string',
+                placeholder: 'e.g. 698c7b0dc0a4b76ce34bd0b2',
+            },
+            {
+                displayName: 'By URL',
+                name: 'url',
+                type: 'string',
+                placeholder: 'Paste Bloomflow URL...',
+                extractValue: {
+                    type: 'regex',
+                    regex: '/([a-f0-9]{24})/',
+                },
+            },
+        ],
         routing: {
             request: {
                 method: 'GET',
-                url: '=/api/public/items/{{$parameter.itemId}}',
+                url: '=/api/public/items/{{$value}}',
             },
         },
     },
