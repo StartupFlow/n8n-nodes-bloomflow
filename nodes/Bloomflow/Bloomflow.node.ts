@@ -94,18 +94,14 @@ export class Bloomflow implements INodeType {
 				const typologyParam = this.getCurrentNodeParameter('typology') as
 					| string
 					| { value: string };
-
 				const typology =
 					typeof typologyParam === 'object'
 						? typologyParam?.value
 						: typologyParam;
-
 				if (!typology) {
 					return { results: [] };
 				}
-
 				const credentials = await this.getCredentials('bloomflowApi');
-
 				const response = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'bloomflowApi',
@@ -120,22 +116,24 @@ export class Bloomflow implements INodeType {
 					},
 				);
 
+				interface BloomflowItem {
+					id: string;
+					name?: string;
+				}
+
 				const data = Array.isArray(response) ? response[0] : response;
-
-				const items = data?.results ?? [];
-
+				const items: BloomflowItem[] = data?.results ?? [];
 				const results = items
-					.filter((item: any) =>
+					.filter((item) =>
 						filter
 							? item.name?.toLowerCase().includes(filter.toLowerCase()) ||
 							item.id?.toLowerCase().includes(filter.toLowerCase())
 							: true,
 					)
-					.map((item: any) => ({
+					.map((item) => ({
 						name: `${item.name || 'Unnamed'} (${item.id})`,
 						value: item.id,
 					}));
-
 				return { results };
 			}
 		},
