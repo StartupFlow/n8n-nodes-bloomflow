@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "n8n community node for Bloomflow API integration",
   "license": "MIT",
-  "homepage": "",
   "keywords": ["n8n-community-node-package"],
   "author": { "name": "Bloomflow Team"},
   "repository": {

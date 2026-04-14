@@ -10,7 +10,7 @@ export class BloomflowApi implements ICredentialType {
     name = 'bloomflowApi';
     displayName = 'Bloomflow API';
     icon: Icon = 'file:../nodes/Bloomflow/bloomflow.svg';
-    documentationUrl = 'https://github.com/org/-bloomflow?tab=readme-ov-file#credentials';
+    documentationUrl = 'https://github.com/startupflow/n8n-nodes-bloomflow#credentials';
     properties: INodeProperties[] = [
         {
             displayName: 'Base URL',
