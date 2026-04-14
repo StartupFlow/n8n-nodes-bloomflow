@@ -92,6 +92,7 @@ Load these before working on the relevant area:
 | Files in `credentials/`              | `.agents/credentials.md`                                            |
 | Adding a new version to a node       | `.agents/versioning.md`                                             |
 | Starting a new task or planning      | `.agents/workflow.md`                                               |
+| Bloomflow node (any file)            | `.agents/bloomflow.md`                                              |
 
 ## Additional resources
 If you need any extra information, here are links to n8n's official docs
