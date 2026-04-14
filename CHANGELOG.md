@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] — 2026-04-14
+## [1.0.0] — 2026-04-14
 
 ### Added
 - Initial release of the Bloomflow n8n community node

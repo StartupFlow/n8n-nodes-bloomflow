@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-bloomflow",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "n8n community node for Bloomflow API integration",
   "license": "MIT",
   "keywords": ["n8n-community-node-package"],
@@ -9,6 +9,8 @@
     "type": "git",
     "url": "https://github.com/startupflow/n8n-nodes-bloomflow.git"
   },
+  "homepage": "https://github.com/startupflow/n8n-nodes-bloomflow#readme",
+  "bugs": { "url": "https://github.com/startupflow/n8n-nodes-bloomflow/issues" },
   "scripts": {
     "build": "n8n-node build",
     "build:watch": "tsc --watch",
