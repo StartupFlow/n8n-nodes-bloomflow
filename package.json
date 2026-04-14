@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-bloomflow",
+  "name": "@bloomflow/n8n-nodes-bloomflow",
   "version": "1.0.0",
   "description": "n8n community node for Bloomflow API integration",
   "license": "MIT",
@@ -21,6 +21,9 @@
     "prepublishOnly": "n8n-node prerelease"
   },
   "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": true,
