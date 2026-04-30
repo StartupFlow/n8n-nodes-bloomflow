@@ -11,11 +11,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/startupflow/n8n-nodes-bloomflow.git"
+    "url": "https://github.com/StartupFlow/n8n-nodes-bloomflow.git"
   },
-  "homepage": "https://github.com/startupflow/n8n-nodes-bloomflow#readme",
+  "homepage": "https://github.com/StartupFlow/n8n-nodes-bloomflow#readme",
   "bugs": {
-    "url": "https://github.com/startupflow/n8n-nodes-bloomflow/issues"
+    "url": "https://github.com/StartupFlow/n8n-nodes-bloomflow/issues"
   },
   "scripts": {
     "build": "n8n-node build",
