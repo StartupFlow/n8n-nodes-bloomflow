@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "description": "n8n community node for Bloomflow API integration",
   "license": "MIT",
-  "keywords": ["n8n-community-node-package"],
-  "author": { "name": "Bloomflow Team"},
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "author": {
+    "name": "Bloomflow Team"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/startupflow/n8n-nodes-bloomflow.git"
   },
   "homepage": "https://github.com/startupflow/n8n-nodes-bloomflow#readme",
-  "bugs": { "url": "https://github.com/startupflow/n8n-nodes-bloomflow/issues" },
+  "bugs": {
+    "url": "https://github.com/startupflow/n8n-nodes-bloomflow/issues"
+  },
   "scripts": {
     "build": "n8n-node build",
     "build:watch": "tsc --watch",
@@ -20,22 +26,30 @@
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": true,
-    "credentials": ["dist/credentials/BloomflowApi.credentials.js"],
-    "nodes": ["dist/nodes/Bloomflow/Bloomflow.node.js"]
+    "credentials": [
+      "dist/credentials/BloomflowApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Bloomflow/Bloomflow.node.js"
+    ]
   },
   "devDependencies": {
-    "@n8n/node-cli": "*",
+    "@n8n/node-cli": "^0.28.0",
     "eslint": "9.32.0",
     "prettier": "3.6.2",
     "release-it": "^19.0.4",
     "typescript": "5.9.2"
   },
-  "peerDependencies": { "n8n-workflow": "*" }
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
 }
