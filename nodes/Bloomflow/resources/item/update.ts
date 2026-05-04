@@ -48,9 +48,7 @@ export const itemUpdateDescription: INodeProperties[] = [
         ],
         routing: {
             request: {
-                body: {
-                    typologyId: '={{ typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"] }}',
-                },
+                body: '={{ (() => { const v = typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]; return v ? { typologyId: v } : {}; })() }}',
             },
         },
     },
@@ -116,7 +114,7 @@ export const itemUpdateDescription: INodeProperties[] = [
         description: 'The name of the item',
         routing: {
             request: {
-                body: { name: '={{ $value }}' },
+                body: '={{ $value ? { name: $value } : {} }}',
             },
         },
     },
@@ -153,7 +151,7 @@ export const itemUpdateDescription: INodeProperties[] = [
         description: 'Website URL of the item',
         routing: {
             request: {
-                body: { website: '={{ $value }}' },
+                body: '={{ $value ? { website: $value } : {} }}',
             },
         },
     },
