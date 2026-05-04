@@ -72,6 +72,7 @@ When getting a single item you can identify it in three ways:
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 * [Bloomflow website](https://www.bloomflow.com/)
+* [Bloomflow Public API documentation](https://docs.bloomflow.com/docs/api/public-api/)
 * [Source code on GitHub](https://github.com/startupflow/n8n-nodes-bloomflow)
 
 ## Version history

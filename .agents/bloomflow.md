@@ -7,6 +7,20 @@ Each Bloomflow instance has its own base URL (e.g. `https://trial.bloomflow.com`
 
 ---
 
+## Official API documentation
+The authoritative reference is the Bloomflow Public API docs:
+https://docs.bloomflow.com/docs/api/public-api/
+
+When local notes in this file conflict with or omit details from the
+official docs, prefer the official docs and update this file accordingly.
+
+If a developer has the Bloomflow API source repo checked out locally, its
+path will be recorded in `CLAUDE.local.md` at the repo root (gitignored).
+That repo is the ultimate source of truth — grep it for endpoint behaviour
+when the docs are ambiguous.
+
+---
+
 ## Authentication
 - **Header:** `x-bflow-api-key: <apiKey>`
 - **Base URL:** Configurable per credential (`baseUrl`), default `https://trial.bloomflow.com`

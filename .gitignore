@@ -24,3 +24,6 @@ credentials/*.json
 
 # Misc
 coverage/
+
+# Local Claude Code overrides (machine-specific paths, etc.)
+CLAUDE.local.md
