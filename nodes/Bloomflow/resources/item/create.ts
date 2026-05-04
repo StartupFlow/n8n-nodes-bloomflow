@@ -48,8 +48,8 @@ export const itemCreateDescription: INodeProperties[] = [
         ],
         routing: {
             request: {
-                qs: {
-                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
+                body: {
+                    typologyId: '={{ typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"] }}',
                 },
             },
         },
@@ -303,7 +303,8 @@ export const itemCreateDescription: INodeProperties[] = [
                 name: 'labels',
                 type: 'json',
                 default: '[]',
-                description: 'Array of label objects, e.g. <code>[{"ID":"security"}]</code>',
+                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
+                description: 'Array of label objects, e.g. <code>[{"id":"security"}]</code>',
                 routing: {
                     request: {
                         body: { labels: '={{ JSON.parse($value) }}' },
@@ -424,7 +425,8 @@ export const itemCreateDescription: INodeProperties[] = [
                 name: 'sources',
                 type: 'json',
                 default: '[]',
-                description: 'Array of source objects, e.g. <code>[{"ID":"5e6fcc67820e9c012f765178"}]</code>',
+                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
+                description: 'Array of source objects, e.g. <code>[{"id":"5e6fcc67820e9c012f765178"}]</code>',
                 routing: {
                     request: {
                         body: { sources: '={{ JSON.parse($value) }}' },
