@@ -40,7 +40,7 @@ export class BloomflowApi implements ICredentialType {
     test: ICredentialTestRequest = {
         request: {
             baseURL: '={{$credentials.baseUrl}}',
-            url: '/v1/user',
+            url: '/api/public/items/reference_data',
         },
     };
 }

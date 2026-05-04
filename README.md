@@ -37,13 +37,14 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ## Credentials
 
-1. **Sign in** to your Bloomflow instance.
-2. Navigate to your account settings and generate an **API Key**.
-3. In n8n, create a new **Bloomflow API** credential and fill in:
-   - **Base URL** — the URL of your Bloomflow instance, e.g. `https://trial.bloomflow.com`
-   - **API Key** — the key generated in step 2
+The Bloomflow Public API uses an API key passed as the `x-bflow-api-key` header. API keys are not self-service — they are issued by Bloomflow on request.
 
-The credential is verified by calling `GET /v1/user` on your instance.
+1. **Request an API key** by emailing [support@bloomflow.com](mailto:support@bloomflow.com) from the email associated with your Bloomflow account. See the [official Getting Started guide](https://docs.bloomflow.com/docs/gettingstarted) for the canonical instructions.
+2. Once you have received your key, in n8n create a new **Bloomflow API** credential and fill in:
+   - **Base URL** — the host of your Bloomflow instance, in the form `https://api.<your-instance>.bloomflow.com` (per the [Bloomflow API docs](https://docs.bloomflow.com/docs/gettingstarted)). The node appends `/api/public/...` automatically.
+   - **API Key** — the key provided by Bloomflow support (sent as `x-bflow-api-key`)
+
+The credential is verified by calling `GET /api/public/items/reference_data` on your instance — a key-guarded endpoint, so a successful test confirms the API key works for real operations.
 
 ## Compatibility
 

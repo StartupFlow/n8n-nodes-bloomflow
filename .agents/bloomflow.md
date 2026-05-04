@@ -24,7 +24,7 @@ when the docs are ambiguous.
 ## Authentication
 - **Header:** `x-bflow-api-key: <apiKey>`
 - **Base URL:** Configurable per credential (`baseUrl`), default `https://trial.bloomflow.com`
-- **Credential test endpoint:** `GET /v1/user`
+- **Credential test endpoint:** `GET /api/public/items/reference_data` (key-guarded, cheap GET)
 - Default request headers: `Accept: application/json`, `Content-Type: application/json`
 
 ---
