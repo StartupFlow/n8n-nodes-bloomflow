@@ -109,7 +109,7 @@ export class Bloomflow implements INodeType {
 						method: 'GET',
 						url: `${credentials.baseUrl}/api/public/items`,
 						qs: {
-							typology: JSON.stringify([typology]),
+							typology,
 							limit: 50,
 						},
 						json: true,
