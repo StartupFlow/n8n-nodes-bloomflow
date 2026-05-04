@@ -16,6 +16,7 @@ yarn-error.log*
 # Env / secrets
 .env
 .env.*
+.mcp.json
 credentials/*.json
 
 # Editor / IDE
