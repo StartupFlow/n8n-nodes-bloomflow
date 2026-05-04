@@ -303,6 +303,7 @@ export const itemCreateDescription: INodeProperties[] = [
                 name: 'labels',
                 type: 'json',
                 default: '[]',
+                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
                 description: 'Array of label objects, e.g. <code>[{"id":"security"}]</code>',
                 routing: {
                     request: {
@@ -424,6 +425,7 @@ export const itemCreateDescription: INodeProperties[] = [
                 name: 'sources',
                 type: 'json',
                 default: '[]',
+                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
                 description: 'Array of source objects, e.g. <code>[{"id":"5e6fcc67820e9c012f765178"}]</code>',
                 routing: {
                     request: {
