@@ -1,6 +1,6 @@
 {
   "name": "@bloomflow/n8n-nodes-bloomflow",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "n8n community node for Bloomflow API integration",
   "license": "MIT",
   "keywords": [
