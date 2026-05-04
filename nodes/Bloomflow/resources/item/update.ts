@@ -4,7 +4,7 @@ export const itemUpdateDescription: INodeProperties[] = [
     // ─── Notice ──────────────────────────────────────────────────────────────────
 
     {
-        displayName: 'This will replace all fields of the item with the data provided. Make sure to provide all required fields.',
+        displayName: 'Only the fields you provide will be updated. Other fields are left untouched.',
         name: 'updateNote',
         type: 'notice',
         default: '',
@@ -20,7 +20,6 @@ export const itemUpdateDescription: INodeProperties[] = [
         name: 'typology',
         type: 'resourceLocator',
         default: { mode: 'list', value: '' },
-        required: true,
         displayOptions: {
             show: {
                 resource: ['item'],
@@ -107,7 +106,6 @@ export const itemUpdateDescription: INodeProperties[] = [
         displayName: 'Name',
         name: 'name',
         type: 'string',
-        required: true,
         displayOptions: {
             show: {
                 resource: ['item'],
@@ -144,7 +142,6 @@ export const itemUpdateDescription: INodeProperties[] = [
         displayName: 'Website',
         name: 'website',
         type: 'string',
-        required: true,
         default: '',
         displayOptions: {
             show: {
@@ -201,7 +198,7 @@ export const itemUpdateDescription: INodeProperties[] = [
                 bodyInputMode: ['json'],
             },
         },
-        description: 'Full request body as a JSON object. The <code>typologyId</code> and <code>name</code> fields above will be merged in automatically. Example: <code>{"short_description":"AI startup","year_founded":"2020","tags":[{"name":"saas"}]}</code>.',
+        description: 'Full request body as a JSON object. Any values you set in the fields above (<code>typologyId</code>, <code>name</code>) will be merged in. Example: <code>{"short_description":"AI startup","year_founded":"2020","tags":[{"name":"saas"}]}</code>.',
         routing: {
             request: {
                 body: '={{ JSON.parse($value) }}',
