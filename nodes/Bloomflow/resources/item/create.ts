@@ -48,8 +48,8 @@ export const itemCreateDescription: INodeProperties[] = [
         ],
         routing: {
             request: {
-                qs: {
-                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
+                body: {
+                    typologyId: '={{ typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"] }}',
                 },
             },
         },
