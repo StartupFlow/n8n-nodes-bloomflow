@@ -33,14 +33,7 @@ export const itemGetDescription: INodeProperties[] = [
                 hint: 'Enter a typology ID, e.g. startup',
                 placeholder: 'startup'
             },
-        ],
-        routing: {
-            request: {
-                qs: {
-                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
-                },
-            },
-        },
+        ]
     },
     {
         displayName: 'Item',

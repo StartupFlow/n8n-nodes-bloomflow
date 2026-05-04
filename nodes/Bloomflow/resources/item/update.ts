@@ -15,28 +15,6 @@ export const itemUpdateDescription: INodeProperties[] = [
             },
         },
     },
-
-    // ─── Required Fields ─────────────────────────────────────────────────────────
-
-    {
-        displayName: 'Item ID',
-        name: 'itemId',
-        type: 'string',
-        required: true,
-        displayOptions: {
-            show: {
-                resource: ['item'],
-                operation: ['update'],
-            },
-        },
-        default: '',
-        description: 'The ID of the item to update',
-        routing: {
-            request: {
-                url: '=/api/public/items/{{$parameter.itemId}}',
-            },
-        },
-    },
     {
         displayName: 'Typology',
         name: 'typology',
@@ -49,7 +27,7 @@ export const itemUpdateDescription: INodeProperties[] = [
                 operation: ['update'],
             },
         },
-        description: 'The typology to filter items by',
+        description: 'The typology of the item',
         modes: [
             {
                 displayName: 'From List',
@@ -71,9 +49,57 @@ export const itemUpdateDescription: INodeProperties[] = [
         ],
         routing: {
             request: {
-                qs: {
-                    typology: '={{ JSON.stringify([typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"]]) }}',
+                body: {
+                    typologyId: '={{ typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"] }}',
                 },
+            },
+        },
+    },
+     // ─── Required Fields ─────────────────────────────────────────────────────────
+    {
+        displayName: 'Item',
+        name: 'itemId',
+        type: 'resourceLocator',
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['item'],
+                operation: ['update'],
+            },
+        },
+        default: { mode: 'id', value: '' },
+        modes: [
+            {
+                displayName: 'Select from List',
+                name: 'list',
+                type: 'list',
+                placeholder: 'Select an item...',
+                typeOptions: {
+                    searchListMethod: 'searchItems',
+                    searchable: true,
+                },
+            },
+            {
+                displayName: 'By ID',
+                name: 'id',
+                type: 'string',
+                placeholder: 'e.g. 698c7b0dc0a4b76ce34bd0b2',
+            },
+            {
+                displayName: 'By URL',
+                name: 'url',
+                type: 'string',
+                placeholder: 'Paste Bloomflow URL...',
+                extractValue: {
+                    type: 'regex',
+                    regex: '/([a-f0-9]{24})/',
+                },
+            },
+        ],
+        description: 'The item to update',
+        routing: {
+            request: {
+                url: '=/api/public/items/{{$value}}',
             },
         },
     },
