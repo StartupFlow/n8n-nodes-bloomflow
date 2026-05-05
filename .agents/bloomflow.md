@@ -59,6 +59,7 @@ Can be extracted from a Bloomflow URL using the regex `/([a-f0-9]{24})/`.
 | Create item | POST | `/api/public/items` |
 | Update item | PUT | `/api/public/items/{itemId}` |
 | List item documents | GET | `/api/public/items/{itemId}/documents` |
+| Create item document | POST | `/api/public/items/{itemId}/documents` |
 | Get reference data | GET | `/api/public/items/reference_data` |
 
 ---
@@ -233,6 +234,87 @@ for any future operation taking an `itemId` from a `resourceLocator`.
 
 **Permission:** API key needs `public:items:*` (or typology-specific scope). Read-only keys
 work via `get@public:items:*`.
+
+---
+
+### Create (`POST /api/public/items/{itemId}/documents`)
+**Two source modes** controlled by the `sourceMode` UI toggle:
+
+#### URL mode (`sourceMode = 'url'`)
+Reference an externally-hosted document. The Bloomflow server does **not** download
+the file — it stores the URL and serves it via a redirect.
+
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `url` | query | **required**, the document URL |
+| `url_file_name` | query | optional display name; defaults to the URL |
+
+#### File mode (`sourceMode = 'file'`)
+Upload a binary file from a previous n8n node (e.g. Read Binary File, HTTP Request
+returning binary, Google Drive, etc.). Sent as `multipart/form-data`.
+
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `file` | formData | **required**, the binary buffer |
+| `image` | query | optional, default `false` |
+| `file_name` | query | optional override; defaults to the binary's original filename |
+
+**Common optional param (both modes):**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `interactionId` | query | Optionally link the document to an interaction |
+
+#### Multipart implementation
+Pure declarative routing cannot stream binary data, and n8n community nodes
+**cannot declare runtime dependencies** (lint rule `@n8n/community-nodes/no-restricted-imports`),
+so the standard `form-data` package is off-limits. The Create operation builds
+the multipart body manually in a **`preSend` hook**
+([create.ts](../nodes/Bloomflow/resources/document/create.ts) → `createDocumentPreSend`):
+
+1. Reads `binaryProperty` from node parameters (default `data`).
+2. Calls `this.helpers.assertBinaryData(binaryProperty)` and `getBinaryDataBuffer(binaryProperty)`.
+3. Generates a random boundary string.
+4. Concatenates a `Buffer` containing:
+   ```
+   --BOUNDARY\r\n
+   Content-Disposition: form-data; name="file"; filename="..."\r\n
+   Content-Type: <mimeType>\r\n
+   \r\n
+   <binary bytes>\r\n
+   --BOUNDARY--\r\n
+   ```
+5. Strips the inherited `Content-Type: application/json` from `requestDefaults`,
+   then sets `Content-Type: multipart/form-data; boundary=<...>` and `Content-Length`.
+6. Returns `{ body: Buffer, json: false, headers: ... }`.
+
+**Why not `formData` or the `form-data` package?**
+- `IHttpRequestOptions.formData` is the legacy `request` library shape; n8n's
+  modern axios-based RoutingNode silently ignores it.
+- The `form-data` npm package would work but adding it as a dependency fails
+  the n8n Cloud lint check.
+
+**Filename safety:** `encodeFilename()` quote-escapes per RFC 7578, plus adds
+`filename*=UTF-8''…` for non-ASCII names per RFC 5987.
+
+URL mode short-circuits the hook (`if (sourceMode !== 'file') return requestOptions`).
+Use this same Buffer-concat pattern for any future endpoint accepting
+`multipart/form-data`.
+
+**Response shape:** Single document object (same shape as List, see above).
+
+**Permission:** API key needs write scope on items (`public:items:*` without the
+`get@` prefix). Internally the handler calls `validateItemPermission(item, req, 'update')`
+— so users with read-only keys, or keys scoped to a typology that doesn't include
+the parent item, will get 403.
+
+**Mode-detection edge case:** the handler decides URL vs FILE mode via
+`url || Boolean(url_file_name)`. The n8n UI prevents ambiguous combinations by
+hiding mode-specific fields under `displayOptions.show.sourceMode`. If you ever
+expose both URL and file-mode fields simultaneously in a custom flow, sending
+`url_file_name` alone (with no `url`) will trip the handler into URL mode and
+fail with `INVALID_URL`.
 
 ---
 

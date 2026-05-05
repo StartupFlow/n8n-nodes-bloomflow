@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { createDocumentPreSend, documentCreateDescription } from './create';
 import { documentListDescription } from './list';
 
 const showOnlyForDocuments = {
@@ -16,6 +17,21 @@ export const documentDescription: INodeProperties[] = [
         },
         options: [
             {
+                name: 'Create',
+                value: 'create',
+                action: 'Create a document for an item',
+                description: 'Add a document to an item via URL or file upload',
+                routing: {
+                    request: {
+                        method: 'POST',
+                        url: '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents',
+                    },
+                    send: {
+                        preSend: [createDocumentPreSend],
+                    },
+                },
+            },
+            {
                 name: 'List',
                 value: 'list',
                 action: 'List documents for an item',
@@ -31,4 +47,5 @@ export const documentDescription: INodeProperties[] = [
         default: 'list',
     },
     ...documentListDescription,
+    ...documentCreateDescription,
 ];
