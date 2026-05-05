@@ -58,6 +58,7 @@ Can be extracted from a Bloomflow URL using the regex `/([a-f0-9]{24})/`.
 | Get item | GET | `/api/public/items/{itemId}` |
 | Create item | POST | `/api/public/items` |
 | Update item | PUT | `/api/public/items/{itemId}` |
+| List item documents | GET | `/api/public/items/{itemId}/documents` |
 | Get reference data | GET | `/api/public/items/reference_data` |
 
 ---
@@ -182,6 +183,56 @@ fields — unlike Create, this is not a soft upsert.
 
 **Optional parameters:** same as Create — `withEnrichment`, `context` query params, and the
 full set of additional body fields. Same `bodyInputMode` toggle (`fields` / `json`).
+
+---
+
+## Resource: Document
+
+Documents linked to an item. The Bloomflow API groups these as **Items > Documents** —
+they're a sub-resource of Item, identified by the parent item's ID in the URL path.
+
+### List (`GET /api/public/items/{itemId}/documents`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `typology` | (UI only) | Required only when itemId mode is `list`, used to filter the `searchItems` picker; **not** sent to the documents endpoint |
+
+The `itemId` `resourceLocator` supports three modes (same as Item Get):
+- **Select from list** — calls `searchItems` listSearch method (requires typology to be set first)
+- **By ID** — direct string input
+- **By URL** — extracts ID from a pasted Bloomflow URL via regex `/[a-f0-9]{24}/`
+
+**URL routing pattern:** the path is built with an inline regex extraction so all three
+modes resolve to a clean 24-char ID:
+```ts
+url: '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents'
+```
+The `extractValue` regex on the URL mode is **not** auto-applied during declarative
+template interpolation, so the route itself must extract the ID. Use the same pattern
+for any future operation taking an `itemId` from a `resourceLocator`.
+
+**Response shape:** Array of document objects:
+```json
+[{
+  "id": "62d9705552a73e0013508e37",
+  "name": "financial-q1.ppt",
+  "url": "{{host}}/api/S3/documents/...",
+  "type": "company-document-file",
+  "size": 443589,
+  "pinned": false,
+  "isExternal": false,
+  "format": "application/vnd.ms-powerpoint",
+  "companyId": "62d943ee03b2e60013022971",
+  "created_by": "...",
+  "updated_by": "...",
+  "created_at": "...",
+  "updated_at": "..."
+}]
+```
+
+**Permission:** API key needs `public:items:*` (or typology-specific scope). Read-only keys
+work via `get@public:items:*`.
 
 ---
 

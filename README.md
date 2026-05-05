@@ -29,6 +29,14 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 | **List** | List all items under a typology, with optional filters: search term, labels, tags, sources, date range, sort, and pagination. |
 | **Update** | Fully replace an item's fields (not a patch — all required fields must be provided). |
 
+### Document
+
+Documents linked to an item (the Bloomflow API groups these as **Items > Documents**).
+
+| Operation | Description |
+|-----------|-------------|
+| **List** | List all documents linked to an item. Identify the item by ID, by URL, or by selecting it from a list. |
+
 ### Reference Data
 
 | Operation | Description |
