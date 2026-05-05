@@ -4,7 +4,7 @@ export const itemUpdateDescription: INodeProperties[] = [
     // ─── Notice ──────────────────────────────────────────────────────────────────
 
     {
-        displayName: 'This will replace all fields of the item with the data provided. Make sure to provide all required fields.',
+        displayName: 'Only the fields you provide will be updated. Other fields are left untouched.',
         name: 'updateNote',
         type: 'notice',
         default: '',
@@ -15,47 +15,7 @@ export const itemUpdateDescription: INodeProperties[] = [
             },
         },
     },
-    {
-        displayName: 'Typology',
-        name: 'typology',
-        type: 'resourceLocator',
-        default: { mode: 'list', value: '' },
-        required: true,
-        displayOptions: {
-            show: {
-                resource: ['item'],
-                operation: ['update'],
-            },
-        },
-        description: 'The typology of the item',
-        modes: [
-            {
-                displayName: 'From List',
-                name: 'list',
-                type: 'list',
-                typeOptions: {
-                    searchListMethod: 'getTypologies',
-                    searchable: true,
-                    searchFilterRequired: false,
-                },
-            },
-            {
-                displayName: 'ID',
-                name: 'id',
-                type: 'string',
-                hint: 'Enter a typology ID, e.g. startup',
-                placeholder: 'startup'
-            },
-        ],
-        routing: {
-            request: {
-                body: {
-                    typologyId: '={{ typeof $parameter["typology"] === "object" ? $parameter["typology"].value : $parameter["typology"] }}',
-                },
-            },
-        },
-    },
-     // ─── Required Fields ─────────────────────────────────────────────────────────
+    // ─── Required Fields ─────────────────────────────────────────────────────────
     {
         displayName: 'Item',
         name: 'itemId',
@@ -107,7 +67,6 @@ export const itemUpdateDescription: INodeProperties[] = [
         displayName: 'Name',
         name: 'name',
         type: 'string',
-        required: true,
         displayOptions: {
             show: {
                 resource: ['item'],
@@ -118,7 +77,7 @@ export const itemUpdateDescription: INodeProperties[] = [
         description: 'The name of the item',
         routing: {
             request: {
-                body: { name: '={{ $value }}' },
+                body: '={{ $value ? { name: $value } : {} }}',
             },
         },
     },
@@ -144,7 +103,6 @@ export const itemUpdateDescription: INodeProperties[] = [
         displayName: 'Website',
         name: 'website',
         type: 'string',
-        required: true,
         default: '',
         displayOptions: {
             show: {
@@ -156,7 +114,7 @@ export const itemUpdateDescription: INodeProperties[] = [
         description: 'Website URL of the item',
         routing: {
             request: {
-                body: { website: '={{ $value }}' },
+                body: '={{ $value ? { website: $value } : {} }}',
             },
         },
     },
@@ -201,7 +159,7 @@ export const itemUpdateDescription: INodeProperties[] = [
                 bodyInputMode: ['json'],
             },
         },
-        description: 'Full request body as a JSON object. The <code>typologyId</code> and <code>name</code> fields above will be merged in automatically. Example: <code>{"short_description":"AI startup","year_founded":"2020","tags":[{"name":"saas"}]}</code>.',
+        description: 'Full request body as a JSON object. Any values you set in the fields above (<code>name</code>) will be merged in. Example: <code>{"short_description":"AI startup","year_founded":"2020","tags":[{"name":"saas"}]}</code>.',
         routing: {
             request: {
                 body: '={{ JSON.parse($value) }}',
