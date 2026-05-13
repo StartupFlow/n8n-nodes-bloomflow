@@ -1,4 +1,5 @@
 import { ILoadOptionsFunctions, INodeListSearchResult, NodeConnectionTypes, type INodeType, type INodeTypeDescription } from 'n8n-workflow';
+import { documentDescription } from './resources/document';
 import { itemDescription } from './resources/item';
 import { referenceDataDescription } from './resources/referenceData';
 
@@ -33,6 +34,10 @@ export class Bloomflow implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
+						name: 'Document',
+						value: 'document',
+					},
+					{
 						name: 'Item',
 						value: 'item',
 					},
@@ -44,6 +49,7 @@ export class Bloomflow implements INodeType {
 				],
 				default: 'item',
 			},
+			...documentDescription,
 			...itemDescription,
 			...referenceDataDescription
 

@@ -29,6 +29,15 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 | **List** | List all items under a typology, with optional filters: search term, labels, tags, sources, date range, sort, and pagination. |
 | **Update** | Fully replace an item's fields (not a patch — all required fields must be provided). |
 
+### Document
+
+Documents linked to an item (the Bloomflow API groups these as **Items > Documents**).
+
+| Operation | Description |
+|-----------|-------------|
+| **Create** | Add a document to an item, either by referencing an external URL or by uploading a binary file from a previous node. |
+| **List** | List all documents linked to an item. Identify the item by ID, by URL, or by selecting it from a list. |
+
 ### Reference Data
 
 | Operation | Description |
@@ -68,6 +77,16 @@ When getting a single item you can identify it in three ways:
 - **Select from list** — search by name within a typology
 - **By ID** — enter the 24-character MongoDB ObjectID directly
 - **By URL** — paste a Bloomflow item URL; the ID is extracted automatically
+
+### Create Document — URL vs File modes
+The Document → Create operation has a **Source** toggle:
+- **External URL** — pass a URL the Bloomflow server can reach. Use this for
+  links to Google Drive, public file URLs, etc. The file is not downloaded
+  by Bloomflow; the URL is stored and served via redirect.
+- **File from Previous Node** — upload a binary file received on the input.
+  Set **Binary Property** to the property name holding the file (default `data`,
+  which is what most n8n nodes — Read Binary File, HTTP Request, Google Drive — use).
+  The request is sent as `multipart/form-data` automatically.
 
 ## Resources
 
