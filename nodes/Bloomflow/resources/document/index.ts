@@ -6,6 +6,13 @@ const showOnlyForDocuments = {
     resource: ['document'],
 };
 
+// Resolves the parent item path for /api/public/items/{itemId}/documents.
+// Accepts the three resourceLocator modes (list, id, url) and extracts a
+// 24-char hex ID; declarative routing does not auto-apply extractValue, so the
+// regex match must live in the template itself. See .agents/bloomflow.md.
+export const DOCUMENTS_URL_TEMPLATE =
+    '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents';
+
 export const documentDescription: INodeProperties[] = [
     {
         displayName: 'Operation',
@@ -24,7 +31,7 @@ export const documentDescription: INodeProperties[] = [
                 routing: {
                     request: {
                         method: 'POST',
-                        url: '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents',
+                        url: DOCUMENTS_URL_TEMPLATE,
                     },
                     send: {
                         preSend: [createDocumentPreSend],
@@ -39,7 +46,7 @@ export const documentDescription: INodeProperties[] = [
                 routing: {
                     request: {
                         method: 'GET',
-                        url: '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents',
+                        url: DOCUMENTS_URL_TEMPLATE,
                     },
                 },
             },

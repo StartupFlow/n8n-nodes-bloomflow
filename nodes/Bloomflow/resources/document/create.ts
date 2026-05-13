@@ -196,7 +196,7 @@ export const documentCreateDescription: INodeProperties[] = [
         description: 'URL of the external document (must be reachable from the Bloomflow server)',
         routing: {
             request: {
-                qs: { url: '={{ $value }}' },
+                qs: { url: '={{ $value || undefined }}' },
             },
         },
     },
@@ -215,7 +215,10 @@ export const documentCreateDescription: INodeProperties[] = [
         description: 'Display name for the document. Defaults to the URL when empty.',
         routing: {
             request: {
-                qs: { url_file_name: '={{ $value }}' },
+                // `|| undefined` so n8n omits the param when blank — the server
+                // treats truthy `url_file_name` as the URL-mode signal (see
+                // .agents/bloomflow.md "Mode-detection edge case").
+                qs: { url_file_name: '={{ $value || undefined }}' },
             },
         },
     },
@@ -241,10 +244,10 @@ export const documentCreateDescription: INodeProperties[] = [
     // ─── Optional Parameters ─────────────────────────────────────────────────────
 
     {
-        displayName: 'Parameters',
+        displayName: 'Additional Fields',
         name: 'parameters',
         type: 'collection',
-        placeholder: 'Add Parameter',
+        placeholder: 'Add Field',
         default: {},
         displayOptions: {
             show: {
@@ -266,7 +269,7 @@ export const documentCreateDescription: INodeProperties[] = [
                 description: 'Override the file name. If not set, the original binary file name is used.',
                 routing: {
                     request: {
-                        qs: { file_name: '={{ $value }}' },
+                        qs: { file_name: '={{ $value || undefined }}' },
                     },
                 },
             },
@@ -278,7 +281,7 @@ export const documentCreateDescription: INodeProperties[] = [
                 description: 'Optionally link the document to an interaction by ID',
                 routing: {
                     request: {
-                        qs: { interactionId: '={{ $value }}' },
+                        qs: { interactionId: '={{ $value || undefined }}' },
                     },
                 },
             },

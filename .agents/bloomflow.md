@@ -205,9 +205,13 @@ The `itemId` `resourceLocator` supports three modes (same as Item Get):
 - **By URL** — extracts ID from a pasted Bloomflow URL via regex `/[a-f0-9]{24}/`
 
 **URL routing pattern:** the path is built with an inline regex extraction so all three
-modes resolve to a clean 24-char ID:
+modes resolve to a clean 24-char ID. It lives as a single exported constant in
+[document/index.ts](../nodes/Bloomflow/resources/document/index.ts) and is referenced
+by both the Create and List operations — keep them in sync via the constant, never
+inline:
 ```ts
-url: '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents'
+export const DOCUMENTS_URL_TEMPLATE =
+    '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/documents';
 ```
 The `extractValue` regex on the URL mode is **not** auto-applied during declarative
 template interpolation, so the route itself must extract the ID. Use the same pattern
@@ -315,6 +319,13 @@ hiding mode-specific fields under `displayOptions.show.sourceMode`. If you ever
 expose both URL and file-mode fields simultaneously in a custom flow, sending
 `url_file_name` alone (with no `url`) will trip the handler into URL mode and
 fail with `INVALID_URL`.
+
+**Empty-string footgun (mitigated):** because of the rule above, every optional
+query param on Create routes its value through `={{ $value || undefined }}` so
+n8n drops the key entirely when blank rather than sending `?url_file_name=`.
+This applies to `url_file_name`, `file_name`, and `interactionId`. Keep this
+shape for any future optional query params on this endpoint — a stray empty
+string in `url_file_name` would silently flip the handler into URL mode.
 
 ---
 
