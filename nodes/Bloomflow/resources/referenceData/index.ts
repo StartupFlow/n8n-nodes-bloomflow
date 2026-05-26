@@ -13,14 +13,43 @@ export const referenceDataDescription: INodeProperties[] = [
         },
         options: [
             {
-                name: 'Get',
+                name: 'Get Ecosystem Reference Data',
+                value: 'getEcosystem',
+                action: 'Get ecosystem reference data',
+                description:
+                    'Get reference data for ecosystem relations — lists available relation types per typology, including each relation\'s allowed target typologies',
+                routing: {
+                    request: {
+                        method: 'GET',
+                        url: '/api/public/items/ecosystem/reference_data',
+                    },
+                },
+            },
+            {
+                // Keep value 'get' for backward compatibility with workflows
+                // saved before the rename. The displayName changed only.
+                name: 'Get Item Reference Data',
                 value: 'get',
-                action: 'Get reference data',
-                description: 'Get all reference data',
+                action: 'Get item reference data',
+                description:
+                    'Get reference data for items — lists typologies, custom fields, sources, labels, and other item-level configuration',
                 routing: {
                     request: {
                         method: 'GET',
                         url: '/api/public/items/reference_data',
+                    },
+                },
+            },
+            {
+                name: 'Get Workflow Reference Data',
+                value: 'getWorkflow',
+                action: 'Get workflow reference data',
+                description:
+                    'Get reference data for workflows — lists statuses (step templates) and states per typology, including milestone templates and predefined reason values',
+                routing: {
+                    request: {
+                        method: 'GET',
+                        url: '/api/public/items/workflows/reference_data',
                     },
                 },
             },
