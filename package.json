@@ -41,7 +41,8 @@
       "dist/credentials/BloomflowApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/Bloomflow/Bloomflow.node.js"
+      "dist/nodes/Bloomflow/Bloomflow.node.js",
+      "dist/nodes/Bloomflow/BloomflowTrigger.node.js"
     ]
   },
   "devDependencies": {
