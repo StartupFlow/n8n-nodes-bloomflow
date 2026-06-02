@@ -28,3 +28,7 @@ coverage/
 
 # Local Claude Code overrides (machine-specific paths, etc.)
 CLAUDE.local.md
+
+# Local-only test setup (kept out of upstream — see jest.config.js + tests/)
+tests/
+jest.config.js

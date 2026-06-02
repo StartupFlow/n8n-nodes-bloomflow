@@ -38,11 +38,39 @@ Documents linked to an item (the Bloomflow API groups these as **Items > Documen
 | **Create** | Add a document to an item, either by referencing an external URL or by uploading a binary file from a previous node. |
 | **List** | List all documents linked to an item. Identify the item by ID, by URL, or by selecting it from a list. |
 
+### Ecosystem
+
+Ecosystem relations linking an item to other items (the Bloomflow API groups these as **Items > Ecosystem**). Each relation has an origin item, a target item, and a relation type (e.g. "selected solution", "partner").
+
+| Operation | Description |
+|-----------|-------------|
+| **Create** | Create a relation between two items. Pick the origin item, the target item, and (optionally) a relation type — if omitted, Bloomflow picks the default relation for the origin/target typology pair. |
+| **Delete** | Delete a specific ecosystem relation between two items. |
+| **Get** | Retrieve a single ecosystem relation by its ID, scoped to the parent item. |
+| **List** | List all ecosystem relations linked to an item (both relations where the item is the origin and where it is the target). |
+
+### Workflow
+
+Workflows linked to an item (the Bloomflow API groups these as **Items > Workflows**). Each workflow has a current state (`in_progress`, `completed`, `standby`, `rejected`) and a list of statuses (steps), each with a date, comment, and milestones.
+
+| Operation | Description |
+|-----------|-------------|
+| **Create State** | Transition a workflow to a new state. Some states require a reason (e.g. `rejected` typically has a fixed list of allowed reasons — the picker loads them automatically). |
+| **Create Status** | Add a new status (step) to a workflow. Optionally supply a comment, date, and an `addStepMode` strategy for the existing history. |
+| **Get** | Retrieve a single workflow by ID, scoped to the parent item. |
+| **Get Status** | Retrieve a single status (step) of a workflow. |
+| **List** | List all workflows linked to an item. |
+| **Update Status** | Update an existing workflow status — comment and date. |
+
+> **Note on milestones:** The Bloomflow Public API currently parses milestone payloads on Create/Update Status but the underlying task persistence is a server-side `TODO` — sending milestones is a no-op today. The full milestone UX (multi-select sourced from the status template + JSON fallback) is implemented and ready in the node, just hidden behind a comment block. Once the API ships persistence, re-enabling is a one-file uncomment.
+
 ### Reference Data
 
 | Operation | Description |
 |-----------|-------------|
-| **Get** | Retrieve all reference data for the Bloomflow instance, including available typologies. |
+| **Get Ecosystem Reference Data** | List the relation types available per typology, including each relation's allowed target typologies. Useful when building a UI for ecosystem links. |
+| **Get Item Reference Data** | Retrieve item-level configuration for the Bloomflow instance — typologies, custom fields, sources, labels, etc. |
+| **Get Workflow Reference Data** | List workflow statuses (step templates with milestones) and states (with mandatoryness flags and predefined reason values) per typology. |
 
 ## Credentials
 
