@@ -148,6 +148,7 @@ export const workflowGetStatusDescription: INodeProperties[] = [
                 name: 'id',
                 type: 'string',
                 placeholder: 'e.g. 5f7b50dc7b8792030dd93a1b',
+                hint: 'Use the status\'s instanceId (from status[].instanceId on the workflow detail), not status[].id — the latter is the step template id and will 404 with UNKNOWN_STATUS',
             },
             {
                 displayName: 'By URL',
