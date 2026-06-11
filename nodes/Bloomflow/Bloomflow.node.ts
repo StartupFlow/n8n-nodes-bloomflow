@@ -2,7 +2,9 @@ import { ILoadOptionsFunctions, INodeListSearchResult, INodePropertyOptions, Nod
 import { documentDescription } from './resources/document';
 import { ecosystemDescription } from './resources/ecosystem';
 import { itemDescription } from './resources/item';
+import { noteDescription } from './resources/note';
 import { referenceDataDescription } from './resources/referenceData';
+import { taskDescription } from './resources/task';
 import { workflowDescription } from './resources/workflow';
 
 /**
@@ -91,8 +93,16 @@ export class Bloomflow implements INodeType {
 						value: 'item',
 					},
 					{
+						name: 'Note',
+						value: 'note',
+					},
+					{
 						name: 'Reference Data',
 						value: 'referenceData',
+					},
+					{
+						name: 'Task',
+						value: 'task',
 					},
 					{
 						name: 'Workflow',
@@ -105,7 +115,9 @@ export class Bloomflow implements INodeType {
 			...documentDescription,
 			...ecosystemDescription,
 			...itemDescription,
+			...noteDescription,
 			...referenceDataDescription,
+			...taskDescription,
 			...workflowDescription
 
 		],
@@ -793,6 +805,206 @@ export class Bloomflow implements INodeType {
 
 				return { results };
 			},
+			async searchNotes(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const itemIdParam = this.getCurrentNodeParameter('itemId') as
+					| string
+					| { value: string };
+				const rawItemId =
+					typeof itemIdParam === 'object'
+						? itemIdParam?.value
+						: itemIdParam;
+				const itemId = (rawItemId || '').toString().match(/[a-f0-9]{24}/)?.[0];
+				if (!itemId) {
+					return { results: [] };
+				}
+				const credentials = await this.getCredentials('bloomflowApi');
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items/${itemId}/notes`,
+						json: true,
+					},
+				);
+
+				interface BloomflowNote {
+					id: string;
+					text?: string;
+					date?: string;
+				}
+
+				const notes: BloomflowNote[] = Array.isArray(response) ? response : [];
+
+				const results = notes
+					.map((n) => {
+						const preview = (n.text || '').replace(/\s+/g, ' ').slice(0, 60);
+						const datePart = n.date ? `${n.date.slice(0, 10)} — ` : '';
+						const previewPart = preview || 'Note';
+						return {
+							name: `${datePart}${previewPart} (${n.id})`,
+							value: n.id,
+						};
+					})
+					.filter((entry) =>
+						filter
+							? entry.name.toLowerCase().includes(filter.toLowerCase()) ||
+							entry.value.toLowerCase().includes(filter.toLowerCase())
+							: true,
+					);
+
+				return { results };
+			},
+			async searchTasks(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const itemIdParam = this.getCurrentNodeParameter('itemId') as
+					| string
+					| { value: string };
+				const rawItemId =
+					typeof itemIdParam === 'object'
+						? itemIdParam?.value
+						: itemIdParam;
+				const itemId = (rawItemId || '').toString().match(/[a-f0-9]{24}/)?.[0];
+				if (!itemId) {
+					return { results: [] };
+				}
+				const credentials = await this.getCredentials('bloomflowApi');
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items/tasks`,
+						qs: {
+							itemIds: itemId,
+							limit: 100,
+						},
+						json: true,
+					},
+				);
+
+				interface BloomflowTask {
+					id: string;
+					title?: string;
+					status?: string;
+					due_date?: string;
+				}
+				interface ListTasksResponse {
+					tasks?: BloomflowTask[];
+				}
+
+				const tasks: BloomflowTask[] = Array.isArray(response)
+					? (response as BloomflowTask[])
+					: (response as ListTasksResponse)?.tasks ?? [];
+
+				const results = tasks
+					.map((t) => {
+						const statusTag = t.status ? `[${t.status}] ` : '';
+						const due = t.due_date ? ` — due ${t.due_date.slice(0, 10)}` : '';
+						return {
+							name: `${statusTag}${t.title || 'Task'}${due} (${t.id})`,
+							value: t.id,
+						};
+					})
+					.filter((entry) =>
+						filter
+							? entry.name.toLowerCase().includes(filter.toLowerCase()) ||
+							entry.value.toLowerCase().includes(filter.toLowerCase())
+							: true,
+					);
+
+				return { results };
+			},
+			async getTaskTemplates(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const typologyParam = this.getCurrentNodeParameter('typology') as
+					| string
+					| { value: string }
+					| undefined;
+				let selectedTypology =
+					typeof typologyParam === 'object'
+						? typologyParam?.value
+						: typologyParam;
+
+				const credentials = await this.getCredentials('bloomflowApi');
+
+				// Same pattern as getWorkflowStepTemplates: when the UI typology field
+				// is hidden (itemId is in id/url mode), derive the typology from the
+				// selected item so the dropdown shows only compatible templates.
+				if (!selectedTypology) {
+					selectedTypology = await deriveTypologyFromItem(
+						this,
+						credentials.baseUrl,
+					);
+				}
+
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items/tasks/reference_data`,
+						json: true,
+					},
+				);
+
+				interface TaskTemplate {
+					id: string;
+					title?: string;
+					workflow_step_label?: string;
+				}
+				interface TaskRefTypology {
+					id: string;
+					task_templates?: TaskTemplate[];
+				}
+				interface TaskReferenceData {
+					typologies?: TaskRefTypology[];
+				}
+
+				const data = response as TaskReferenceData;
+				const typologies = data?.typologies ?? [];
+
+				const relevant = selectedTypology
+					? typologies.filter((t) => t.id === selectedTypology)
+					: typologies;
+
+				const seen = new Set<string>();
+				const all: TaskTemplate[] = [];
+				for (const t of relevant) {
+					for (const tt of t.task_templates ?? []) {
+						if (!seen.has(tt.id)) {
+							seen.add(tt.id);
+							all.push(tt);
+						}
+					}
+				}
+
+				const results = all
+					.filter((tt) =>
+						filter
+							? (tt.title ?? '').toLowerCase().includes(filter.toLowerCase()) ||
+							tt.id.toLowerCase().includes(filter.toLowerCase())
+							: true,
+					)
+					.map((tt) => {
+						const stepTag = tt.workflow_step_label
+							? `${tt.workflow_step_label} › `
+							: '';
+						return {
+							name: `${stepTag}${tt.title || 'Task Template'} (${tt.id})`,
+							value: tt.id,
+						};
+					});
+
+				return { results };
+			},
 			async searchWorkflowStatuses(
 				this: ILoadOptionsFunctions,
 				filter?: string,
@@ -867,6 +1079,73 @@ export class Bloomflow implements INodeType {
 		// the api-platform's milestone persistence is a TODO. They're kept live
 		// here so re-enabling the field blocks is a single-file change.
 		loadOptions: {
+			async getTaskTemplates(
+				this: ILoadOptionsFunctions,
+			): Promise<INodePropertyOptions[]> {
+				// Multi-select variant used by the Task List filter. Mirrors the
+				// listSearch.getTaskTemplates loader but returns INodePropertyOptions[]
+				// directly (no search, no INodeListSearchResult wrapper).
+				const typologyParam = this.getCurrentNodeParameter('typology') as
+					| string
+					| { value: string }
+					| undefined;
+				const selectedTypology =
+					typeof typologyParam === 'object'
+						? typologyParam?.value
+						: typologyParam;
+
+				const credentials = await this.getCredentials('bloomflowApi');
+				const response = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'bloomflowApi',
+					{
+						method: 'GET',
+						url: `${credentials.baseUrl}/api/public/items/tasks/reference_data`,
+						json: true,
+					},
+				);
+
+				interface TaskTemplate {
+					id: string;
+					title?: string;
+					workflow_step_label?: string;
+				}
+				interface TaskRefTypology {
+					id: string;
+					task_templates?: TaskTemplate[];
+				}
+				interface TaskReferenceData {
+					typologies?: TaskRefTypology[];
+				}
+
+				const data = response as TaskReferenceData;
+				const typologies = data?.typologies ?? [];
+
+				const relevant = selectedTypology
+					? typologies.filter((t) => t.id === selectedTypology)
+					: typologies;
+
+				const seen = new Set<string>();
+				const all: TaskTemplate[] = [];
+				for (const t of relevant) {
+					for (const tt of t.task_templates ?? []) {
+						if (!seen.has(tt.id)) {
+							seen.add(tt.id);
+							all.push(tt);
+						}
+					}
+				}
+
+				return all.map((tt) => {
+					const stepTag = tt.workflow_step_label
+						? `${tt.workflow_step_label} › `
+						: '';
+					return {
+						name: `${stepTag}${tt.title || 'Task Template'}`,
+						value: tt.id,
+					};
+				});
+			},
 			async getStepTemplateMilestones(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
