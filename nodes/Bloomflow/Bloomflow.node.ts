@@ -603,13 +603,25 @@ export class Bloomflow implements INodeType {
 			): Promise<INodeListSearchResult> {
 				const typologyParam = this.getCurrentNodeParameter('typology') as
 					| string
-					| { value: string };
-				const selectedTypology =
+					| { value: string }
+					| undefined;
+				let selectedTypology =
 					typeof typologyParam === 'object'
 						? typologyParam?.value
 						: typologyParam;
 
 				const credentials = await this.getCredentials('bloomflowApi');
+
+				// When itemId is in id/url mode the Typology UI field is hidden, so
+				// fall back to deriving the typology from the selected item — same
+				// pattern as getWorkflowStepTemplates / getWorkflowStateReasons.
+				if (!selectedTypology) {
+					selectedTypology = await deriveTypologyFromItem(
+						this,
+						credentials.baseUrl,
+					);
+				}
+
 				const response = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'bloomflowApi',
@@ -1074,10 +1086,6 @@ export class Bloomflow implements INodeType {
 				return { results };
 			},
 		},
-		// Both loaders below pair with the Milestones UI in createStatus.ts /
-		// updateStatus.ts, which is currently disabled (commented out) because
-		// the api-platform's milestone persistence is a TODO. They're kept live
-		// here so re-enabling the field blocks is a single-file change.
 		loadOptions: {
 			async getTaskTemplates(
 				this: ILoadOptionsFunctions,
@@ -1089,12 +1097,23 @@ export class Bloomflow implements INodeType {
 					| string
 					| { value: string }
 					| undefined;
-				const selectedTypology =
+				let selectedTypology =
 					typeof typologyParam === 'object'
 						? typologyParam?.value
 						: typologyParam;
 
 				const credentials = await this.getCredentials('bloomflowApi');
+
+				// When itemId is in id/url mode, the Typology UI field is hidden, so
+				// fall back to deriving the typology from the selected item — mirrors
+				// the listSearch.getTaskTemplates loader used by Task Create.
+				if (!selectedTypology) {
+					selectedTypology = await deriveTypologyFromItem(
+						this,
+						credentials.baseUrl,
+					);
+				}
+
 				const response = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'bloomflowApi',
@@ -1146,6 +1165,11 @@ export class Bloomflow implements INodeType {
 					};
 				});
 			},
+			// The two milestone loaders below pair with the Milestones UI in
+			// createStatus.ts / updateStatus.ts, which is currently disabled
+			// (commented out) because the api-platform's milestone persistence is
+			// a TODO. They're kept live here so re-enabling the field blocks is a
+			// single-file change.
 			async getStepTemplateMilestones(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
