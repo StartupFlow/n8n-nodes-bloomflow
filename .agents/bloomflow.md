@@ -71,6 +71,18 @@ Can be extracted from a Bloomflow URL using the regex `/([a-f0-9]{24})/`.
 | Create workflow status | POST | `/api/public/items/{itemId}/workflows/{workflowId}/status` |
 | Get workflow status | GET | `/api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}` |
 | Update workflow status | PUT | `/api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}` |
+| List item notes | GET | `/api/public/items/{itemId}/notes` |
+| Get item note | GET | `/api/public/items/{itemId}/notes/{noteId}` |
+| Create item note | POST | `/api/public/items/{itemId}/notes` |
+| Update item note | PUT | `/api/public/items/{itemId}/notes/{noteId}` |
+| List tasks | GET | `/api/public/items/tasks` |
+| Get task | GET | `/api/public/tasks/{taskId}` |
+| Create task | POST | `/api/public/tasks` |
+| Update task | PUT | `/api/public/tasks/{taskId}` |
+| Complete task | POST | `/api/public/tasks/{taskId}/complete` |
+| Cancel task | POST | `/api/public/tasks/{taskId}/cancel` |
+| Delete task | DELETE | `/api/public/tasks/{taskId}` |
+| Get task reference data | GET | `/api/public/items/tasks/reference_data` |
 | Get reference data | GET | `/api/public/items/reference_data` |
 
 ---
@@ -795,6 +807,277 @@ Partial update — only the fields sent are applied.
 
 ---
 
+## Resource: Note
+
+Notes attached to an item — short free-text annotations with optional date and
+user mentions. The Bloomflow API groups these as **Items > Notes** — they're
+a sub-resource of Item, identified by the parent item's ID in the URL path.
+
+### URL templates
+All endpoints nested under `/api/public/items/{itemId}/notes...`. Both
+`itemId` and `noteId` are `resourceLocator`s; declarative routing does not
+auto-apply `extractValue`, so each segment re-applies the 24-char hex regex.
+The templates live as exported constants in
+[note/index.ts](../nodes/Bloomflow/resources/note/index.ts) — reuse them, don't
+inline:
+```ts
+export const NOTES_URL_TEMPLATE = `=/api/public/items/${itemIdSegment}/notes`;
+export const NOTE_URL_TEMPLATE  = `=/api/public/items/${itemIdSegment}/notes/${noteIdSegment}`;
+```
+
+### List (`GET /api/public/items/{itemId}/notes`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `typology` | (UI only) | Filters the `searchItems` picker when itemId mode is `list`; **not** sent to the endpoint |
+
+**No query parameters and no pagination** — `getItemNotes` returns the full
+set ordered by `date desc`.
+
+**Confidential filter (silent):** the api-platform calls
+`canSeeConfidentialNotes(req, itemId)`, which returns `false` for **all**
+Public API callers (`req.$user.isBot || !req.$user.id`). Notes with
+`confidential=true` are stripped from List and Get responses unconditionally —
+the node never sees them. Documented here so it doesn't look like data loss.
+
+**Response shape:** Array of note objects:
+```json
+[{
+  "id": "62d9720152a73e0013508e3c",
+  "name": "My note",
+  "date": "2022-07-18T00:00:00.000Z",
+  "text": "Lorem Ipsum Dolor sit amet",
+  "confidential": false,
+  "userMentions": [],
+  "isAutomatic": true,
+  "typologyId": "startup",
+  "parentTypologyId": "startup",
+  "companyId": "62d943ee03b2e60013022971",
+  "created_by": "...",
+  "updated_by": "...",
+  "created_at": "...",
+  "updated_at": "..."
+}]
+```
+
+**Permission:** `public:items:*` (or `get@public:items:*`). Caller must have
+`read` permission on the item.
+
+---
+
+### Get (`GET /api/public/items/{itemId}/notes/{noteId}`)
+Same `itemId` resourceLocator triad (list/id/url). `noteId` is also a
+`resourceLocator` — list mode is driven by `searchNotes`, which fetches the
+List endpoint for the selected item and maps each note to
+`"{YYYY-MM-DD} — {text preview} ({id})"`. Returns `[]` if no `itemId`.
+
+**Misleading error:** a missing note returns `UNKNOWN_ITEM` (404), not
+`UNKNOWN_NOTE` — see [endpoints-notes.js:113-117](../../api-platform/modules/oldback/server/models/public-apis/companies/endpoints-notes.js).
+Don't surface it as a confused error message.
+
+---
+
+### Create (`POST /api/public/items/{itemId}/notes`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `text` | body | Note content. Plain text or HTML. |
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Date | `date` | ISO 8601 string | Defaults server-side to the current time when omitted |
+
+**HTML auto-detection:** `createNote` and `updateNote` run
+`/<\/?[a-z][\s\S]*>/i` against the incoming `text`. If matched, the plain-text
+conversion goes to `text` and the original HTML goes to `contentHtml`. The
+node simply forwards `text` as-is — do **not** strip tags on the client side.
+
+**`userMentions` deliberately not exposed on Create:** the public
+`addItemNote_request_schema` only documents `text` and `date`, even though the
+internal `createNote` model accepts `userMentions`. We match the schema, not
+the internal model, so the node UI stays in sync with the official contract.
+Update Note **does** expose `userMentions` because it's in
+`updateItemNote_request_schema`.
+
+**Permission:** API key needs write scope on items (`public:items:*`). The
+endpoint calls `validateItemPermission(item, req, 'update')`.
+
+---
+
+### Update (`PUT /api/public/items/{itemId}/notes/{noteId}`)
+Partial update — only the fields sent are applied.
+
+**Required parameters:** `itemId`, `noteId` (path).
+
+**Optional body fields (under `Update Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Date | `date` | ISO 8601 string | |
+| Text | `text` | string | Same HTML auto-detection as Create |
+| User Mentions | `userMentions` | string → JSON array | Comma-separated; node splits + trims to an array of strings |
+
+**Permission:** `public:items:*`.
+
+---
+
+## Resource: Task
+
+Tasks attached to a workflow on an item. Each task is an instance of a
+`TaskTemplate` (referenced by `task_template_id`) and lives under a
+`CompanyWorkflow`. The Bloomflow API groups these as **Items > Tasks**.
+
+### Path quirk
+The List endpoint and the reference-data endpoint are under `/api/public/items/tasks…`
+(server scopes by typology), but every individual task operation is under
+`/api/public/tasks/{taskId}…`. The n8n routes capture this in two separate
+URL constants — don't combine them:
+
+```ts
+export const TASKS_LIST_URL_TEMPLATE     = '/api/public/items/tasks';
+export const TASKS_URL_TEMPLATE          = '/api/public/tasks';
+export const TASK_URL_TEMPLATE           = `=/api/public/tasks/${taskIdSegment}`;
+export const TASK_COMPLETE_URL_TEMPLATE  = `=/api/public/tasks/${taskIdSegment}/complete`;
+export const TASK_CANCEL_URL_TEMPLATE    = `=/api/public/tasks/${taskIdSegment}/cancel`;
+```
+
+### List (`GET /api/public/items/tasks`)
+**Required filter (server-enforced):** at least one of `itemIds` or
+`companyWorkflowIds`. Sending neither throws `MISSING_FILTER` (400). The node
+exposes a single `itemId` resourceLocator (consistent with every other
+sub-resource) and forwards it as `itemIds=<id>` — the server derives the
+workflow(s) from that item via the `CompanyWorkflow` collection.
+
+**UI:** `typology` + `itemId` pickers (typology only shown when itemId mode is
+`list`), then an `Additional Fields` collection with:
+| Field | Type | Sent as | Notes |
+|-------|------|---------|-------|
+| Workflow IDs | string | `companyWorkflowIds` | Override the itemId-derived workflows |
+| Task Templates | multiOptions | `taskTemplateIds` | Loaded by `getTaskTemplates` from `/items/tasks/reference_data`, filtered by typology |
+| Statuses | multiOptions (`pending`/`completed`/`overdue`) | `statuses` | Comma-joined |
+| Assignee IDs | string | `assigneeIds` | Comma-separated |
+| Assigner IDs | string | `assignerIds` | Comma-separated |
+| Sort Field | options | `sortField` | `title`/`dueDate`/`status`/`workflowName`/`assignee`/`companyName`/`created_at` |
+| Sort Order | options | `sortOrder` | `asc`/`desc` |
+| Limit | number 1–100 | `limit` | Default 50 |
+| Offset | number | `offset` | |
+
+**Response shape:** `{ total, limit, offset, tasks: TaskOutput[] }` per
+`listTasks` in `examples-task.js`. Each `TaskOutput`:
+```json
+{
+  "id": "6745a1b2c3d4e5f6a7b8c9d0",
+  "task_template_id": "...",
+  "company_workflow_id": "...",
+  "title": "Review technical documentation",
+  "description": "...",
+  "mandatory": true,
+  "status": "pending",
+  "due_date": "2024-03-15T00:00:00.000Z",
+  "done_at": null,
+  "done_by": null,
+  "auto_reminder": true,
+  "auto_reminder_nb_days": 3,
+  "auto_reminder_sent": false,
+  "private": false,
+  "urls": [...],
+  "feedback": null,
+  "assignees": [...],
+  "assigners": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+---
+
+### Get / Update / Complete / Cancel / Delete
+All five take a `taskId` path param. The UI for each is the same triad:
+`typology` (filters items picker) → `itemId` (used to populate the task
+picker, but **not** sent to the endpoint) → `taskId` (`resourceLocator` with
+`searchTasks` list mode).
+
+`searchTasks` calls `GET /api/public/items/tasks?itemIds=<id>&limit=100`,
+unwraps the `tasks` array, and maps each entry to
+`"[{status}] {title} — due {YYYY-MM-DD} ({id})"`. Returns `[]` if `itemId`
+isn't set yet — the picker stays empty until the user picks an item, mirroring
+how `searchWorkflows` behaves.
+
+**Complete / Cancel** also expose an `Additional Fields` collection with a
+single optional `feedback` string (`POST` body).
+
+**Delete** has no body and returns `{ success: true, message: 'Task deleted successfully' }`.
+
+---
+
+### Create (`POST /api/public/tasks`)
+**Required body fields:**
+| Param | API key | Type | Notes |
+|-------|---------|------|-------|
+| Item | `item_id` | body | Sent from the `itemId` resourceLocator via regex extraction. **Lives in the body, not the URL** — the endpoint is `/api/public/tasks`, with no item segment. |
+| Task Template | `task_template_id` | `resourceLocator` (list/id/url) | List mode populated by `getTaskTemplates` (typology-filtered) |
+| Assignee IDs | `assignee_ids` | comma-separated string → JSON array | At least one required (server throws `MISSING_ASSIGNEE_IDS`) |
+| Assigner IDs | `assigner_ids` | comma-separated string → JSON array | At least one required (`MISSING_ASSIGNER_IDS`) |
+
+**`item_id` body vs path quirk:** unlike Create Note (which puts the item in
+the URL), Create Task takes `item_id` in the **body** because the endpoint is
+`/api/public/tasks` with no item segment. The node still uses the same
+regex-extraction template for the body field so all three `itemId`
+resourceLocator modes (list/id/url) yield a clean 24-char hex.
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Description | `description` | string | Overrides the task template description |
+| Due Date | `due_date` | ISO 8601 | |
+| Auto Reminder | `auto_reminder` | boolean | Defaults server-side to false |
+| Auto Reminder Days Before Due Date | `auto_reminder_nb_days` | number | Defaults server-side to 3 when `auto_reminder=true` |
+| Invited Users (JSON) | `invited_users` | JSON array | `[{ email, first_name, last_name, type, group_ids? }]`; `type` ∈ `"assignee" \| "assigner"` |
+
+**Title is intentionally not exposed:** the api-platform refuses any update
+to `title` when the task is linked to a template (`TITLE_NOT_EDITABLE` 400).
+Since Create always requires `task_template_id`, sending `title` would be a
+guaranteed footgun. Same reasoning excludes it from Update.
+
+**Permission:** `public:items:*`. Caller needs `update` permission on the
+parent item.
+
+---
+
+### Update (`PUT /api/public/tasks/{taskId}`)
+Partial update. Same picker triad as Get (typology → itemId → taskId).
+
+**Optional body fields (under `Update Fields`):** description, due_date,
+auto_reminder, auto_reminder_nb_days, assignee_ids, assigner_ids,
+invited_users (JSON).
+
+**`title` deliberately omitted** — see Create above.
+
+**Use the dedicated complete/cancel endpoints to change status** — the
+update endpoint silently ignores `status`. The node doesn't expose it.
+
+---
+
+### Reference data picker — `getTaskTemplates`
+Lives in two places to support both UI shapes:
+- `methods.listSearch.getTaskTemplates` — for Create's `taskTemplateId`
+  resourceLocator (returns `INodeListSearchResult` with `name`/`value`
+  including the workflow step label as `"{step} › {title} ({id})"`).
+- `methods.loadOptions.getTaskTemplates` — for List's `taskTemplateIds`
+  `multiOptions` filter (returns `INodePropertyOptions[]` directly,
+  unwrapped, without the `(id)` suffix since the value column already shows
+  the ID under the hood).
+
+Both fetch `/api/public/items/tasks/reference_data` and filter by the
+selected typology (or fall back to a deduplicated cross-typology set when
+typology is unknown). The listSearch variant also runs the
+`deriveTypologyFromItem` fallback used elsewhere when the UI typology field
+is hidden.
+
+---
+
 ## Resource: Reference Data
 
 Three reference endpoints, one per related domain. All return data scoped to
@@ -885,6 +1168,42 @@ Used internally by `getWorkflowStepTemplates`, `getWorkflowStates`,
 `getWorkflowStateReasons`, `getStepTemplateMilestones`, and the disabled-but-
 ready `getStatusMilestones` (paired with the commented-out milestones UX).
 
+### Get Task Reference Data (`GET /api/public/items/tasks/reference_data`)
+Operation value `getTask`. Returns the task templates available per typology
+(grouped by their workflow step) plus the fixed set of task statuses.
+
+**Response shape:**
+```ts
+{
+  typologies: [{
+    id: string,                       // e.g. "startup"
+    task_templates: [{
+      workflow_step_id: string,
+      workflow_step_label: string,
+      workflow_step_order: number,
+      id: string,                     // task template id (24-char hex)
+      title: string,
+      description: string,
+      mandatory: boolean,
+      order: number,
+    }],
+  }],
+  statuses: [
+    { id: 'pending',   label: 'Pending'   },
+    { id: 'completed', label: 'Completed' },
+    { id: 'overdue',   label: 'Overdue'   },
+  ],
+}
+```
+Server builds `task_templates` by walking each `WorkflowStep` in the
+typology's `WorkflowTemplate` and fanning out via `TaskTemplate.find({ workflowStepId })`,
+so the list is the per-typology template catalog — there's no separate
+"workflow-instance-specific" filter (similar to the Workflow reference_data
+caveat).
+
+Used internally by `getTaskTemplates` (both `listSearch` for Create and
+`loadOptions` for List filter).
+
 ---
 
 ## Node implementation patterns
@@ -942,6 +1261,22 @@ labels: '={{ JSON.stringify($value.split(",").map(v => v.trim()).filter(Boolean)
   endpoints look up by `CompanyWorkflowStep.id`, so the picker uses `s.instanceId`
   for the picker value (falling back to `s.id` if absent on older responses). Sending
   `s.id` here would 404 with `UNKNOWN_STATUS`.
+- `searchNotes` — fetches `/api/public/items/{itemId}/notes`. Requires `itemId` to
+  already be set; returns `[]` otherwise. Maps each note to
+  `"{YYYY-MM-DD} — {first 60 chars of text} ({id})"`. Used by the Note Get and
+  Update operations' `noteId` picker.
+- `searchTasks` — fetches `/api/public/items/tasks?itemIds={itemId}&limit=100`.
+  Requires `itemId` to be set; returns `[]` otherwise. Unwraps `tasks[]` from the
+  paginated response and maps each task to `"[{status}] {title} — due {YYYY-MM-DD} ({id})"`.
+  Used by Task Get / Update / Complete / Cancel / Delete.
+- `getTaskTemplates` — fetches `/api/public/items/tasks/reference_data`, used by
+  Task Create's `taskTemplateId` picker. Same per-typology filter pattern as
+  `getWorkflowStepTemplates` (falls back to `deriveTypologyFromItem` when the UI
+  typology field is hidden). Each entry is displayed as
+  `"{workflow_step_label} › {title} ({id})"`. A separate
+  `loadOptions.getTaskTemplates` exists for the Task List multi-select filter —
+  same fetch + filter, returns `INodePropertyOptions[]` directly without the
+  resourceLocator wrapper.
 
 ### Item fields that are numeric-looking but typed as `string`
 `nb_employees`, `total_funding_usd`, `year_founded`, `etablissement_year_founded` — all
