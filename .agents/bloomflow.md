@@ -60,6 +60,29 @@ Can be extracted from a Bloomflow URL using the regex `/([a-f0-9]{24})/`.
 | Update item | PUT | `/api/public/items/{itemId}` |
 | List item documents | GET | `/api/public/items/{itemId}/documents` |
 | Create item document | POST | `/api/public/items/{itemId}/documents` |
+| List item ecosystem relations | GET | `/api/public/items/{itemId}/ecosystem` |
+| Get item ecosystem relation | GET | `/api/public/items/{itemId}/ecosystem/{relationId}` |
+| Create item ecosystem relation | POST | `/api/public/items/{itemId}/ecosystem` |
+| Delete item ecosystem relation | DELETE | `/api/public/items/{itemId}/ecosystem/{relationId}` |
+| Get ecosystem reference data | GET | `/api/public/items/ecosystem/reference_data` |
+| List item workflows | GET | `/api/public/items/{itemId}/workflows` |
+| Get item workflow | GET | `/api/public/items/{itemId}/workflows/{workflowId}` |
+| Create workflow state | POST | `/api/public/items/{itemId}/workflows/{workflowId}/state` |
+| Create workflow status | POST | `/api/public/items/{itemId}/workflows/{workflowId}/status` |
+| Get workflow status | GET | `/api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}` |
+| Update workflow status | PUT | `/api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}` |
+| List item notes | GET | `/api/public/items/{itemId}/notes` |
+| Get item note | GET | `/api/public/items/{itemId}/notes/{noteId}` |
+| Create item note | POST | `/api/public/items/{itemId}/notes` |
+| Update item note | PUT | `/api/public/items/{itemId}/notes/{noteId}` |
+| List tasks | GET | `/api/public/items/tasks` |
+| Get task | GET | `/api/public/tasks/{taskId}` |
+| Create task | POST | `/api/public/tasks` |
+| Update task | PUT | `/api/public/tasks/{taskId}` |
+| Complete task | POST | `/api/public/tasks/{taskId}/complete` |
+| Cancel task | POST | `/api/public/tasks/{taskId}/cancel` |
+| Delete task | DELETE | `/api/public/tasks/{taskId}` |
+| Get task reference data | GET | `/api/public/items/tasks/reference_data` |
 | Get reference data | GET | `/api/public/items/reference_data` |
 
 ---
@@ -329,10 +352,742 @@ string in `url_file_name` would silently flip the handler into URL mode.
 
 ---
 
+## Resource: Ecosystem
+
+Ecosystem relations link an item to other items (e.g. a startup to its
+"selected solution", a portfolio company to a partner). The Bloomflow API
+groups these as **Items > Ecosystem** — they're a sub-resource of Item,
+identified by the parent item's ID in the URL path.
+
+A relation has an **origin** (the item the relation was created from) and a
+**target** (the linked item). When listed via `GET /api/public/items/{itemId}/ecosystem`,
+results include relations where the given item is either the origin **or** the target.
+
+### List (`GET /api/public/items/{itemId}/ecosystem`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `typology` | (UI only) | Required only when itemId mode is `list`, used to filter the `searchItems` picker; **not** sent to the ecosystem endpoint |
+
+The `itemId` `resourceLocator` supports three modes (same as Item Get / Document):
+- **Select from list** — calls `searchItems` listSearch method (requires typology to be set first)
+- **By ID** — direct string input
+- **By URL** — extracts ID from a pasted Bloomflow URL via regex `/[a-f0-9]{24}/`
+
+**No query parameters and no pagination** — the api-platform `getItemRelations(itemId, req, res)`
+signature takes no filters and returns the full set in one response. Callers
+that need to limit results must filter client-side.
+
+**URL routing pattern:** uses the same inline regex extraction as Documents
+(declarative routing does not auto-apply `extractValue`). The template lives
+as a single exported constant in
+[ecosystem/index.ts](../nodes/Bloomflow/resources/ecosystem/index.ts) and is
+referenced by both the List and Get operations — keep them in sync via the
+constant, never inline:
+```ts
+export const ECOSYSTEM_URL_TEMPLATE =
+    '=/api/public/items/{{ (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId || "").toString().match(/[a-f0-9]{24}/)?.[0] || (($parameter.itemId && $parameter.itemId.value) || $parameter.itemId) }}/ecosystem';
+
+// relationId is also a resourceLocator (3 modes — list/id/url), so the same
+// regex-extraction trick is applied for the relation segment too.
+export const ECOSYSTEM_RELATION_URL_TEMPLATE =
+    '=/api/public/items/{{ ...itemId extraction... }}/ecosystem/{{ ...relationId extraction... }}';
+```
+
+**Response shape:** Array of relation objects:
+```json
+[{
+  "id": "62d9705552a73e0013508e37",
+  "originId": "62d943ee03b2e60013022971",
+  "origin": { "id": "62d943ee03b2e60013022971", "name": "Microsoft" },
+  "targetId": "62d943ee03b2e60013022972",
+  "target": { "id": "62d943ee03b2e60013022972", "name": "GitHub" },
+  "relationTypeId": "62d943ee03b2e60013022973",
+  "relationType": {
+    "id": "62d943ee03b2e60013022973",
+    "name": "selected_solution",
+    "texts": {
+      "label": "Selected solution",
+      "labelPlural": "Selected solutions"
+    }
+  },
+  "content": "Lorem Ipsum Dolor sit amet",
+  "created_by": "...",
+  "updated_by": "...",
+  "created_at": "...",
+  "updated_at": "..."
+}]
+```
+`origin` / `target` may be absent if the related Company can't be loaded
+(`cleanRelationOutput` in `public-api-helper.js` spreads them conditionally).
+
+**Permission:** API key needs `public:items:*` (or typology-specific scope).
+Read-only keys work via `get@public:items:*`. Authorization filters out
+relations whose origin or target the caller can't read (Oso
+`authorizedResources` check in `getRelations`).
+
+---
+
+### Get (`GET /api/public/items/{itemId}/ecosystem/{relationId}`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `relationId` | path | 24-char hex ID of the relation |
+| `typology` | (UI only) | Required only when itemId mode is `list`, used to filter the `searchItems` picker; **not** sent to the ecosystem endpoint |
+
+The `itemId` `resourceLocator` supports the same three modes as List.
+`relationId` is also a `resourceLocator` with three modes:
+- **Select from list** — calls the `searchRelations` listSearch method, which
+  fetches `/api/public/items/{itemId}/ecosystem` for the currently-selected
+  item and shows each relation as `"{relationType label}: {origin.name} → {target.name} ({id})"`.
+  Returns an empty list if no `itemId` is selected yet.
+- **By ID** — direct 24-char hex string
+- **By URL** — extracts ID from a pasted Bloomflow URL via regex `/[a-f0-9]{24}/`
+
+**No query parameters.**
+
+**Response shape:** A single relation object (same shape as one List entry,
+see above). The endpoint returns `404 UNKNOWN_ITEM` if the relation doesn't
+exist or `403 FORBIDDEN_TYPOLOGY` if the caller can't read both ends of the
+relation.
+
+**Permission:** same as List — `public:items:*` (or `get@public:items:*`).
+
+---
+
+### Create (`POST /api/public/items/{itemId}/ecosystem`)
+Creates an ecosystem relation between two items. `itemId` is the **origin**;
+the **target** is provided in the body. If `relationTypeId` is omitted,
+Bloomflow falls back to the default relation type for the origin/target
+typology pair (`RelatedObjectLabel.getDefaultRelationBothDirection`).
+
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the origin item |
+| `targetId` | body | 24-char hex ID of the target item |
+| `typology` | (UI only) | Required only when itemId mode is `list`, filters the origin `searchItems` picker; **not** sent to the endpoint |
+| `targetTypology` | (UI only) | Required only when targetId mode is `list`, filters the target `searchTargetItems` picker; **not** sent to the endpoint |
+
+**Optional body fields** (live under the `Additional Fields` collection):
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Content | `content` | string | Free-text content for the relation |
+| Relation Type | `relationTypeId` | string | 24-char hex ID. If omitted, Bloomflow picks the default for the origin/target typology pair. |
+
+**Pickers (compatibility-aware):**
+The dropdowns for `targetTypology` and `relationTypeId` use the ecosystem
+reference_data endpoint to surface only **compatible** options for the chosen
+origin, so the user can't construct invalid pairs through the UI:
+
+- **Target Typology** (`getTargetTypologies`): reads the selected origin
+  `typology` and returns the union of `availableRelations[].targetTypologies`
+  for that origin from `/api/public/items/ecosystem/reference_data`. Origin
+  typology is derived from the selected item (via `GET /api/public/items/{itemId}`)
+  when the UI typology field is hidden (i.e. `itemId.mode !== 'list'`). If the
+  origin typology has no relations defined, the dropdown is correctly empty.
+  Falls back to all typologies if neither the UI typology nor the item-derived
+  typology is available.
+- **Relation Type** (`getRelationTypes`): filters by origin typology AND, when
+  set, intersects with `targetTypology`. Only returns relations whose
+  `targetTypologies[]` includes the selected target.
+
+Both still allow `By ID` entry mode, so a power user can bypass the filtering
+if they really want — the server will then enforce validity with
+`RELATION_ERROR` (400) on invalid pairs.
+
+**Validation behaviour (`addItemRelation` in `endpoints-ecosystem.js`):**
+- If the origin item (`itemId`) doesn't exist → `UNKNOWN_ITEM` (404)
+- If `targetId` is missing or the target item doesn't exist → `UNKNOWN_ITEM` (404)
+- If `relationTypeId` is provided but not valid for origin/target typologies → `RELATION_ERROR` (400)
+- Caller must have `update` permission on the target item
+  (`validateItemPermission(target, req, 'update')`)
+
+**Direction swap (subtle):** `relationIsPossible` returns either `RELATION_DIRECTIONS.DIRECT`
+or `RELATION_DIRECTIONS.REVERSE`. When `REVERSE`, the API **silently swaps**
+origin and target before creating the relation (see lines 167-172 of
+`endpoints-ecosystem.js`: `relIsPossible === DIRECT ? itemId : data.targetId`).
+This is intentional — `RelatedObjectLabel` definitions are directional, so a
+relation type valid only one way still works regardless of which end the user
+picked as origin. The returned relation will reflect the canonical direction,
+which may differ from what was sent. The n8n picker doesn't expose direction
+filters; the server figures it out.
+
+**`targetId` extraction:** like `itemId`, the body template applies inline
+regex extraction so all three resourceLocator modes (list/id/url) yield a
+clean 24-char ID. See `resources/ecosystem/create.ts`.
+
+**Response shape:** Single relation object (same shape as one List entry, see
+above), with `relationType` populated either from the provided
+`relationTypeId` or from the default relation Bloomflow picked.
+
+**Permission:** API key needs write scope on items (`public:items:*` without
+the `get@` prefix). Read-only keys (`get@public:items:*`) get 403.
+
+---
+
+### Delete (`DELETE /api/public/items/{itemId}/ecosystem/{relationId}`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `relationId` | path | 24-char hex ID of the relation to delete |
+| `typology` | (UI only) | Required only when itemId mode is `list`, used to filter the `searchItems` picker; **not** sent to the endpoint |
+
+Same `itemId` + `relationId` resourceLocator pattern as Get — `relationId`
+list mode calls `searchRelations` for the selected `itemId`.
+
+**No query parameters, no body.** Uses the shared
+`ECOSYSTEM_RELATION_URL_TEMPLATE` constant.
+
+**Validation behaviour (`deleteItemRelation` in `endpoints-ecosystem.js`):**
+- Caller must have `delete` permission on the parent item
+  (`validateItemPermission(item, req, 'delete')`)
+- If the relation doesn't exist → `UNKNOWN_ITEM` (404)
+- If the caller can't read both ends of the relation → `FORBIDDEN_TYPOLOGY` (403)
+- On success, also writes an audit log entry
+  (`logDeletion({ model: 'CompanyRelatedObject', … })`)
+
+**Response shape:** The LoopBack `deleteById` result — typically
+`{ "count": 1 }` for a successful deletion.
+
+**Permission:** API key needs write scope on items (`public:items:*` without
+the `get@` prefix). Read-only keys get 403.
+
+---
+
+## Resource: Workflow
+
+A **workflow** is an instance of a `WorkflowTemplate` attached to an item.
+Each workflow has:
+- A current **state** (`in_progress`, `completed`, `standby`, `rejected`) —
+  states are the fixed set seeded by `WorkflowState` (see
+  [migration `00000000000001-migration-to-workflows.js`](../../api-platform/modules/oldback/scripts/migrations/multi-workflow/00000000000001-migration-to-workflows.js)).
+  State transitions can require a **reason**, and the workflow template controls
+  whether the reason is mandatory and whether it's restricted to a fixed list
+  (see `getWorkflowStateReasonValues` / `isWorkflowStateReasonMandatory`).
+- A list of **statuses** (a.k.a. "steps") — each status is an instance of a
+  step template (`CompanyWorkflowStep`) and has a date, comment, and
+  milestones. The most recent status is `current_status`.
+
+The Bloomflow API groups these as **Items > Workflows** — they're a
+sub-resource of Item.
+
+### URL templates
+All workflow endpoints are nested under `/api/public/items/{itemId}/workflows...`,
+and every ID path segment (`itemId`, `workflowId`, `statusId`) is rendered
+from a `resourceLocator`. Declarative routing does **not** auto-apply
+`extractValue`, so each segment re-applies the 24-char hex regex. The
+templates live as exported constants in
+[workflow/index.ts](../nodes/Bloomflow/resources/workflow/index.ts):
+
+```ts
+export const WORKFLOWS_URL_TEMPLATE              = `=/api/public/items/${itemIdSegment}/workflows`;
+export const WORKFLOW_URL_TEMPLATE               = `=/api/public/items/${itemIdSegment}/workflows/${workflowIdSegment}`;
+export const WORKFLOW_STATE_URL_TEMPLATE         = `=/api/public/items/${itemIdSegment}/workflows/${workflowIdSegment}/state`;
+export const WORKFLOW_STATUS_LIST_URL_TEMPLATE   = `=/api/public/items/${itemIdSegment}/workflows/${workflowIdSegment}/status`;
+export const WORKFLOW_STATUS_URL_TEMPLATE        = `=/api/public/items/${itemIdSegment}/workflows/${workflowIdSegment}/status/${statusIdSegment}`;
+```
+Reuse these constants — don't inline the path.
+
+### List (`GET /api/public/items/{itemId}/workflows`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `typology` | (UI only) | Required only when itemId mode is `list`, filters the `searchItems` picker; **not** sent to the endpoint |
+
+**No query parameters.** `listItemWorkflows` in `endpoints-workflow.js` takes
+only `itemId`. Each workflow is returned via `cleanWorkflowOutput`.
+
+**Response shape:** Array of workflow objects (full shape per `cleanWorkflowOutput`,
+[public-api-helper.js:395-432](../../api-platform/modules/oldback/server/helpers/public-api-helper.js)):
+```json
+[{
+  "id": "5f7b50dc7b8792030dd93a1a",
+  "date": "2023-06-15T14:46:46.000Z",
+  "current_state": { "id": "in_progress", "name": "In progress", "date": "..." },
+  "current_status": { "id": "<step-template-id>", "instanceId": "<step-instance-id>", "name": "Identification", "date": "...", "comment": "...", "milestones": [...], "task_templates": [...] },
+  "states": [...],
+  "status": [...],
+  "groups": ["Administrators", "IT department"],
+  "process_id": "<process-item-id>",
+  "process_name": "<process-name>",
+  "process_typology_id": "<process-typology-id>"
+}]
+```
+The `process_*` fields are only populated for **partner-style workflows** — workflows
+attached to an item via a `process` (an inner item with its own typology). For a
+normal item-level workflow these three fields are `undefined`. When set,
+`process_typology_id` is the typology that defines the workflow template — useful
+when filtering reference data for a partner's nested workflow (the item's own
+`typology_id` would point to the partner typology, which doesn't match the
+workflow template's typology).
+
+**Permission:** `public:items:*` (or `get@public:items:*`). Caller must have
+`read` permission on the item (`validateItemIDPermission(itemId, req, 'read')`).
+
+---
+
+### Get (`GET /api/public/items/{itemId}/workflows/{workflowId}`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `workflowId` | path | 24-char hex ID |
+| `typology` | (UI only) | filters the `searchItems` picker; **not** sent |
+
+`workflowId` is a `resourceLocator` (list/id/url). The list mode uses
+`searchWorkflows` (see [listSearch methods](#listsearch-methods-in-bloomflownodets)),
+which fetches the workflows for the currently-selected `itemId`.
+
+**No query parameters.** Returns a single workflow (same shape as one List entry).
+
+If the workflow doesn't exist → `UNKNOWN_WORKFLOW` (404).
+
+**Permission:** same as List.
+
+---
+
+### Create State (`POST /api/public/items/{itemId}/workflows/{workflowId}/state`)
+Transitions a workflow to a new state (e.g. from `in_progress` to `standby`, `rejected`, or `completed`).
+
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `workflowId` | path | 24-char hex ID |
+| `id` | body | State ID, e.g. `in_progress`. Sent under the body key `id` (mapped from the UI field `stateId`). |
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Reason | `reason` | string | May be **mandatory** depending on the workflow template (`REASON_MANDATORY`). May also be restricted to a fixed list (`INVALID_REASON`). Implemented as a `resourceLocator` with two modes: **Select from List** calls `getWorkflowStateReasons` (loads `reasonValues[]` from reference_data scoped to the selected typology + state — typology derived from the item when the UI typology field is hidden) and **Custom Text** is a free string for states that have no fixed list. |
+
+**Validation behaviour (`addItemWorkflowState`):**
+- State `id` must be one returned by the helper `getWorkflowStates()` →
+  otherwise `INVALID_STATE_ID` (400).
+- If the new state equals the current state → `STATE_ALREADY` (400).
+- Caller must have `update` permission on the item.
+
+**State IDs:** the node uses a `resourceLocator` with two modes (list/id).
+List mode calls `getWorkflowStates`, which fetches
+`/api/public/items/workflows/reference_data` and returns the states for the
+selected typology (deduped across typologies if none is selected). State IDs
+are slugs (`in_progress`, `standby`, `rejected`, `completed`), not 24-char
+hex — so the body mapping just unwraps `.value` without regex extraction.
+The exact set depends on the workflow template.
+
+**Response shape:** Single state object: `{ id, name, date }`.
+
+**Permission:** API key needs write scope on items (`public:items:*`).
+
+---
+
+### Create Status (`POST /api/public/items/{itemId}/workflows/{workflowId}/status`)
+Adds a new status (step instance) to a workflow. The new status becomes the
+`current_status`.
+
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `workflowId` | path | 24-char hex ID |
+| `id` | body | 24-char hex status template ID (a.k.a. workflow step template). Sent under the body key `id` (mapped from the UI field `stepTemplateId`, displayed as **Status Template**, a `resourceLocator` with list/id/url modes — list mode is populated by `getWorkflowStepTemplates`). |
+
+**Status Template picker:** `getWorkflowStepTemplates` calls reference_data and filters the dropdown to the typology of the selected item. When the UI `typology` field isn't set (because `itemId` is in `id`/`url` mode), the picker derives the typology by fetching `GET /api/public/items/{itemId}` and reading its `typology_id`. This costs one extra HTTP per dropdown open but ensures the list matches what the validator will accept (per-typology subset, not the full cross-typology catalog).
+
+**Known limitation — partner-process workflows:** When a workflow is attached
+to a partner item via a `process` (inner item with its own typology), the
+workflow's template lives under the **process's** typology, not the partner's
+own. The picker currently only uses the parent item's `typology_id`, so for
+partner-process workflows it would show the wrong list. The workflow detail
+endpoint exposes `process_typology_id` on those workflows — if/when this case
+becomes important, the picker can fetch the workflow detail first and prefer
+that field over the item's typology.
+
+**Milestones — UI DISABLED.** The full milestones UX (Milestones Input toggle, multi-select via `getStepTemplateMilestones`, JSON input) is implemented but commented out in [createStatus.ts](../nodes/Bloomflow/resources/workflow/createStatus.ts) because the api-platform handler doesn't persist milestone changes — `addItemWorkflowStatus` parses the array but the task-creation logic is a `TODO` block (`endpoints-workflow.js` ~lines 670–697). Re-enable by uncommenting the field block; the matching loader in [Bloomflow.node.ts](../nodes/Bloomflow/Bloomflow.node.ts) is left live and ready.
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Add Step Mode | `addStepMode` | string enum | `keep_steps_history` (default), `keep_steps_tasks_history`, `remove_steps_tasks_history`. Comes from the `ADD_STEP_MODE` constant in `public-api-helper.js`. |
+| Comment | `comment` | string | Free-text comment |
+| Date | `date` | ISO 8601 string | `INVALID_DATE` (422) if malformed |
+
+**Validation behaviour (`addItemWorkflowStatus`):**
+- Status template `id` must be in `workflowTemplate.workflowStepIds` →
+  otherwise `INVALID_STATUS_ID` (400). Note: reference_data returns the full typology-wide WorkflowStep catalog, which can be a superset of the template's allowed list. The typology-filtered picker mitigates this but does **not** guarantee validity for every workflow — the only complete fix would be exposing `workflowStepIds` on `cleanWorkflowOutput`, which requires an api-platform change.
+- Workflow must be in progress (`isWorkflowInProgress`) → otherwise
+  `NOT_ALLOWED` (405).
+- Caller must have `update` permission on the item.
+
+**Response shape:** Single status object from `cleanStatusOutput`
+([public-api-helper.js:327-380](../../api-platform/modules/oldback/server/helpers/public-api-helper.js)):
+`{ id, instanceId, name, date, comment, milestones[], task_templates[] }`.
+- `id` is the **step template** ID (the `WorkflowStep` definition).
+- `instanceId` is the **`CompanyWorkflowStep` instance** ID — this is what you
+  pass back as `statusId` for Get Status / Update Status. Mixing the two
+  returns `UNKNOWN_STATUS` (404).
+- `milestones[]` is marked `DEPRECATED: true` server-side in favour of
+  `task_templates[]`, but both are still returned for backward compat. Each
+  entry exposes `checked` (whether the task exists for this status) and
+  `checked_at`.
+
+**Permission:** API key needs write scope on items (`public:items:*`).
+
+---
+
+### Get Status (`GET /api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `workflowId` | path | 24-char hex ID |
+| `statusId` | path | 24-char hex ID |
+| `typology` | (UI only) | filters the `searchItems` picker; **not** sent |
+
+`statusId` is a `resourceLocator` (list/id/url). The list mode uses
+`searchWorkflowStatuses`, which fetches the workflow detail
+(`GET /api/public/items/{itemId}/workflows/{workflowId}`) and returns its
+`status[]` array.
+
+**`id` vs `instanceId` gotcha:** the API expects the **`CompanyWorkflowStep`
+instance id**, which the workflow detail response exposes as `status[].instanceId`
+— **not** `status[].id` (the latter is the step template id, returned by
+`cleanStatusOutput` in `public-api-helper.js` ~line 371). Sending the
+template id 404s with `UNKNOWN_STATUS`. The `searchWorkflowStatuses`
+picker already extracts `instanceId`; for "By ID" mode, callers must do
+the same. The same gotcha applies to Update Status.
+
+**No query parameters.**
+
+**Response shape:** Single status object (same as Create Status response).
+
+If the status doesn't exist → `UNKNOWN_STATUS` (404).
+
+**Permission:** same as List.
+
+---
+
+### Update Status (`PUT /api/public/items/{itemId}/workflows/{workflowId}/status/{statusId}`)
+Partial update — only the fields sent are applied.
+
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `workflowId` | path | 24-char hex ID |
+| `statusId` | path | 24-char hex ID |
+| `typology` | (UI only) | filters the `searchItems` picker; **not** sent |
+
+**Milestones — UI DISABLED.** Same status as Create Status — the full UX (toggle + multi-select via `getStatusMilestones` + JSON) is implemented but commented out in [updateStatus.ts](../nodes/Bloomflow/resources/workflow/updateStatus.ts) because `updateItemWorkflowStatus` doesn't persist milestone changes (TODO blocks at `endpoints-workflow.js` ~lines 670–697). The Update Status multi-select would label entries with `✓`/`☐` based on current `checked` state (via `cleanStatusOutput.milestones[].checked`) and only support marking-as-checked; uncheck requires JSON mode. Re-enable by uncommenting the field block; loader is live.
+
+**Optional body fields (under `Update Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Comment | `comment` | string | Replaces `goals` on the workflow step (only `goals[0]`) |
+| Date | `date` | ISO 8601 string | `INVALID_DATE` (422) if malformed |
+
+**Validation behaviour (`updateItemWorkflowStatus`):**
+- Workflow, template, and status must exist (`UNKNOWN_WORKFLOW` /
+  `UNKNOWN_WORKFLOW_TEMPLATE` / `UNKNOWN_STATUS`).
+- Caller must have `update` permission on the item.
+- The actual task add/remove logic for milestones is currently
+  commented-out in `endpoints-workflow.js` (see TODOs around lines
+  670–697) — sending milestones is effectively a no-op today.
+- The handler only saves the workflow step if `data.date || data.comment`
+  is provided, otherwise the save is skipped.
+
+**Response shape:** Single status object (same as Create Status response).
+
+**Permission:** API key needs write scope on items (`public:items:*`).
+
+---
+
+## Resource: Note
+
+Notes attached to an item — short free-text annotations with optional date and
+user mentions. The Bloomflow API groups these as **Items > Notes** — they're
+a sub-resource of Item, identified by the parent item's ID in the URL path.
+
+### URL templates
+All endpoints nested under `/api/public/items/{itemId}/notes...`. Both
+`itemId` and `noteId` are `resourceLocator`s; declarative routing does not
+auto-apply `extractValue`, so each segment re-applies the 24-char hex regex.
+The templates live as exported constants in
+[note/index.ts](../nodes/Bloomflow/resources/note/index.ts) — reuse them, don't
+inline:
+```ts
+export const NOTES_URL_TEMPLATE = `=/api/public/items/${itemIdSegment}/notes`;
+export const NOTE_URL_TEMPLATE  = `=/api/public/items/${itemIdSegment}/notes/${noteIdSegment}`;
+```
+
+### List (`GET /api/public/items/{itemId}/notes`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID of the parent item |
+| `typology` | (UI only) | Filters the `searchItems` picker when itemId mode is `list`; **not** sent to the endpoint |
+
+**No query parameters and no pagination** — `getItemNotes` returns the full
+set ordered by `date desc`.
+
+**Confidential filter (silent):** the api-platform calls
+`canSeeConfidentialNotes(req, itemId)`, which returns `false` for **all**
+Public API callers (`req.$user.isBot || !req.$user.id`). Notes with
+`confidential=true` are stripped from List and Get responses unconditionally —
+the node never sees them. Documented here so it doesn't look like data loss.
+
+**Response shape:** Array of note objects:
+```json
+[{
+  "id": "62d9720152a73e0013508e3c",
+  "name": "My note",
+  "date": "2022-07-18T00:00:00.000Z",
+  "text": "Lorem Ipsum Dolor sit amet",
+  "confidential": false,
+  "userMentions": [],
+  "isAutomatic": true,
+  "typologyId": "startup",
+  "parentTypologyId": "startup",
+  "companyId": "62d943ee03b2e60013022971",
+  "created_by": "...",
+  "updated_by": "...",
+  "created_at": "...",
+  "updated_at": "..."
+}]
+```
+
+**Permission:** `public:items:*` (or `get@public:items:*`). Caller must have
+`read` permission on the item.
+
+---
+
+### Get (`GET /api/public/items/{itemId}/notes/{noteId}`)
+Same `itemId` resourceLocator triad (list/id/url). `noteId` is also a
+`resourceLocator` — list mode is driven by `searchNotes`, which fetches the
+List endpoint for the selected item and maps each note to
+`"{YYYY-MM-DD} — {text preview} ({id})"`. Returns `[]` if no `itemId`.
+
+**Misleading error:** a missing note returns `UNKNOWN_ITEM` (404), not
+`UNKNOWN_NOTE` — see [endpoints-notes.js:113-117](../../api-platform/modules/oldback/server/models/public-apis/companies/endpoints-notes.js).
+Don't surface it as a confused error message.
+
+---
+
+### Create (`POST /api/public/items/{itemId}/notes`)
+**Required parameters:**
+| Param | Location | Notes |
+|-------|----------|-------|
+| `itemId` | path | 24-char hex ID |
+| `text` | body | Note content. Plain text or HTML. |
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Date | `date` | ISO 8601 string | Defaults server-side to the current time when omitted |
+
+**HTML auto-detection:** `createNote` and `updateNote` run
+`/<\/?[a-z][\s\S]*>/i` against the incoming `text`. If matched, the plain-text
+conversion goes to `text` and the original HTML goes to `contentHtml`. The
+node simply forwards `text` as-is — do **not** strip tags on the client side.
+
+**`userMentions` deliberately not exposed on Create:** the public
+`addItemNote_request_schema` only documents `text` and `date`, even though the
+internal `createNote` model accepts `userMentions`. We match the schema, not
+the internal model, so the node UI stays in sync with the official contract.
+Update Note **does** expose `userMentions` because it's in
+`updateItemNote_request_schema`.
+
+**Permission:** API key needs write scope on items (`public:items:*`). The
+endpoint calls `validateItemPermission(item, req, 'update')`.
+
+---
+
+### Update (`PUT /api/public/items/{itemId}/notes/{noteId}`)
+Partial update — only the fields sent are applied.
+
+**Required parameters:** `itemId`, `noteId` (path).
+
+**Optional body fields (under `Update Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Date | `date` | ISO 8601 string | |
+| Text | `text` | string | Same HTML auto-detection as Create |
+| User Mentions | `userMentions` | string → JSON array | Comma-separated; node splits + trims to an array of strings |
+
+**Permission:** `public:items:*`.
+
+---
+
+## Resource: Task
+
+Tasks attached to a workflow on an item. Each task is an instance of a
+`TaskTemplate` (referenced by `task_template_id`) and lives under a
+`CompanyWorkflow`. The Bloomflow API groups these as **Items > Tasks**.
+
+### Path quirk
+The List endpoint and the reference-data endpoint are under `/api/public/items/tasks…`
+(server scopes by typology), but every individual task operation is under
+`/api/public/tasks/{taskId}…`. The n8n routes capture this in two separate
+URL constants — don't combine them:
+
+```ts
+export const TASKS_LIST_URL_TEMPLATE     = '/api/public/items/tasks';
+export const TASKS_URL_TEMPLATE          = '/api/public/tasks';
+export const TASK_URL_TEMPLATE           = `=/api/public/tasks/${taskIdSegment}`;
+export const TASK_COMPLETE_URL_TEMPLATE  = `=/api/public/tasks/${taskIdSegment}/complete`;
+export const TASK_CANCEL_URL_TEMPLATE    = `=/api/public/tasks/${taskIdSegment}/cancel`;
+```
+
+### List (`GET /api/public/items/tasks`)
+**Required filter (server-enforced):** at least one of `itemIds` or
+`companyWorkflowIds`. Sending neither throws `MISSING_FILTER` (400). The node
+exposes a single `itemId` resourceLocator (consistent with every other
+sub-resource) and forwards it as `itemIds=<id>` — the server derives the
+workflow(s) from that item via the `CompanyWorkflow` collection.
+
+**UI:** `typology` + `itemId` pickers (typology only shown when itemId mode is
+`list`), then an `Additional Fields` collection with:
+| Field | Type | Sent as | Notes |
+|-------|------|---------|-------|
+| Workflow IDs | string | `companyWorkflowIds` | Override the itemId-derived workflows |
+| Task Templates | multiOptions | `taskTemplateIds` | Loaded by `getTaskTemplates` from `/items/tasks/reference_data`, filtered by typology |
+| Statuses | multiOptions (`pending`/`completed`/`overdue`) | `statuses` | Comma-joined |
+| Assignee IDs | string | `assigneeIds` | Comma-separated |
+| Assigner IDs | string | `assignerIds` | Comma-separated |
+| Sort Field | options | `sortField` | `title`/`dueDate`/`status`/`workflowName`/`assignee`/`companyName`/`created_at` |
+| Sort Order | options | `sortOrder` | `asc`/`desc` |
+| Limit | number 1–100 | `limit` | Default 50 |
+| Offset | number | `offset` | |
+
+**Response shape:** `{ total, limit, offset, tasks: TaskOutput[] }` per
+`listTasks` in `examples-task.js`. Each `TaskOutput`:
+```json
+{
+  "id": "6745a1b2c3d4e5f6a7b8c9d0",
+  "task_template_id": "...",
+  "company_workflow_id": "...",
+  "title": "Review technical documentation",
+  "description": "...",
+  "mandatory": true,
+  "status": "pending",
+  "due_date": "2024-03-15T00:00:00.000Z",
+  "done_at": null,
+  "done_by": null,
+  "auto_reminder": true,
+  "auto_reminder_nb_days": 3,
+  "auto_reminder_sent": false,
+  "private": false,
+  "urls": [...],
+  "feedback": null,
+  "assignees": [...],
+  "assigners": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+---
+
+### Get / Update / Complete / Cancel / Delete
+All five take a `taskId` path param. The UI for each is the same triad:
+`typology` (filters items picker) → `itemId` (used to populate the task
+picker, but **not** sent to the endpoint) → `taskId` (`resourceLocator` with
+`searchTasks` list mode).
+
+`searchTasks` calls `GET /api/public/items/tasks?itemIds=<id>&limit=100`,
+unwraps the `tasks` array, and maps each entry to
+`"[{status}] {title} — due {YYYY-MM-DD} ({id})"`. Returns `[]` if `itemId`
+isn't set yet — the picker stays empty until the user picks an item, mirroring
+how `searchWorkflows` behaves.
+
+**Complete / Cancel** also expose an `Additional Fields` collection with a
+single optional `feedback` string (`POST` body).
+
+**Delete** has no body and returns `{ success: true, message: 'Task deleted successfully' }`.
+
+---
+
+### Create (`POST /api/public/tasks`)
+**Required body fields:**
+| Param | API key | Type | Notes |
+|-------|---------|------|-------|
+| Item | `item_id` | body | Sent from the `itemId` resourceLocator via regex extraction. **Lives in the body, not the URL** — the endpoint is `/api/public/tasks`, with no item segment. |
+| Task Template | `task_template_id` | `resourceLocator` (list/id/url) | List mode populated by `getTaskTemplates` (typology-filtered) |
+| Assignee IDs | `assignee_ids` | comma-separated string → JSON array | At least one required (server throws `MISSING_ASSIGNEE_IDS`) |
+| Assigner IDs | `assigner_ids` | comma-separated string → JSON array | At least one required (`MISSING_ASSIGNER_IDS`) |
+
+**`item_id` body vs path quirk:** unlike Create Note (which puts the item in
+the URL), Create Task takes `item_id` in the **body** because the endpoint is
+`/api/public/tasks` with no item segment. The node still uses the same
+regex-extraction template for the body field so all three `itemId`
+resourceLocator modes (list/id/url) yield a clean 24-char hex.
+
+**Optional body fields (under `Additional Fields`):**
+| Field | API key | Type | Notes |
+|-------|---------|------|-------|
+| Description | `description` | string | Overrides the task template description |
+| Due Date | `due_date` | ISO 8601 | |
+| Auto Reminder | `auto_reminder` | boolean | Defaults server-side to false |
+| Auto Reminder Days Before Due Date | `auto_reminder_nb_days` | number | Defaults server-side to 3 when `auto_reminder=true` |
+| Invited Users (JSON) | `invited_users` | JSON array | `[{ email, first_name, last_name, type, group_ids? }]`; `type` ∈ `"assignee" \| "assigner"` |
+
+**Title is intentionally not exposed:** the api-platform refuses any update
+to `title` when the task is linked to a template (`TITLE_NOT_EDITABLE` 400).
+Since Create always requires `task_template_id`, sending `title` would be a
+guaranteed footgun. Same reasoning excludes it from Update.
+
+**Permission:** `public:items:*`. Caller needs `update` permission on the
+parent item.
+
+---
+
+### Update (`PUT /api/public/tasks/{taskId}`)
+Partial update. Same picker triad as Get (typology → itemId → taskId).
+
+**Optional body fields (under `Update Fields`):** description, due_date,
+auto_reminder, auto_reminder_nb_days, assignee_ids, assigner_ids,
+invited_users (JSON).
+
+**`title` deliberately omitted** — see Create above.
+
+**Use the dedicated complete/cancel endpoints to change status** — the
+update endpoint silently ignores `status`. The node doesn't expose it.
+
+---
+
+### Reference data picker — `getTaskTemplates`
+Lives in two places to support both UI shapes:
+- `methods.listSearch.getTaskTemplates` — for Create's `taskTemplateId`
+  resourceLocator (returns `INodeListSearchResult` with `name`/`value`
+  including the workflow step label as `"{step} › {title} ({id})"`).
+- `methods.loadOptions.getTaskTemplates` — for List's `taskTemplateIds`
+  `multiOptions` filter (returns `INodePropertyOptions[]` directly,
+  unwrapped, without the `(id)` suffix since the value column already shows
+  the ID under the hood).
+
+Both fetch `/api/public/items/tasks/reference_data` and filter by the
+selected typology (or fall back to a deduplicated cross-typology set when
+typology is unknown). The listSearch variant also runs the
+`deriveTypologyFromItem` fallback used elsewhere when the UI typology field
+is hidden.
+
+---
+
 ## Resource: Reference Data
 
-### Get (`GET /api/public/items/reference_data`)
-No parameters required. Returns all typologies and reference data for the Bloomflow instance.
+Three reference endpoints, one per related domain. All return data scoped to
+the typologies the API key has access to (filtered server-side via
+`getAllowedTypologyIds`).
+
+### Get Item Reference Data (`GET /api/public/items/reference_data`)
+Operation value `get` (kept for backward compatibility with workflows saved
+before the rename — original displayName was just "Get"). Returns all
+typologies and item-level configuration for the Bloomflow instance.
 
 **Response shape:** Array or object; typologies are extracted as:
 ```ts
@@ -341,6 +1096,113 @@ Array.isArray(response)
   : response?.typologies ?? []
 ```
 Each typology: `{ id: string, name: string }`.
+
+Used internally by the `getTypologies` listSearch method.
+
+### Get Ecosystem Reference Data (`GET /api/public/items/ecosystem/reference_data`)
+Operation value `getEcosystem`. Lists the relation types (`RelatedObjectLabel`s)
+available **per typology**, including each relation's allowed `targetTypologies`.
+Used to determine what relation types a user can pick when creating an ecosystem
+relation between two items.
+
+**Response shape:** Array of per-typology entries (see `getItemsEcosystemReference`
+in `endpoints-ecosystem.js`):
+```ts
+[{
+  itemTypology: string,           // e.g. "startup"
+  availableRelations: [{
+    relationTypeId: string,        // 24-char hex
+    relationTypeLabel: string,     // e.g. "selected_solution"
+    targetTypologies: string[],    // typologies this relation can point to
+  }],
+}]
+```
+Note: relations are listed bidirectionally — if a typology appears in either
+`originTypologies` or `targetTypologies` of a `RelatedObjectLabel`, it's listed,
+with `targetTypologies` adapted to show the "other end" from that typology's
+perspective.
+
+Used internally by the `getRelationTypes` listSearch method (Ecosystem Create).
+
+### Get Workflow Reference Data (`GET /api/public/items/workflows/reference_data`)
+Operation value `getWorkflow`. Returns the workflow template structure per
+typology — statuses (step templates with their milestones), and states (with
+mandatoryness flags and predefined reason values where applicable).
+
+**Response shape:** Object keyed by `typologies`:
+```ts
+{
+  typologies: [{
+    id: string,                    // e.g. "startup_default_process"
+    statuses: [{
+      id: string,                  // step template id (24-char hex)
+      name: string,
+      texts: { name: { EN, FR, ... }, description: { ... } },
+      milestones: [{
+        id: string,                // task template id
+        name: string,
+        mandatory: boolean,
+        texts: { ... },
+      }],
+    }],
+    states: [{
+      id: string,                  // slug: in_progress | completed | standby | rejected
+      name: string,
+      texts: { name: { ... } },
+      isReasonMandatory?: boolean,
+      reasonValues?: string[],     // predefined reasons (e.g. for "rejected")
+    }],
+  }],
+}
+```
+**Caveat (typology-wide superset):** the `statuses` array for a typology is
+**all** `WorkflowStep` rows for that typology, not the subset wired into a
+specific workflow's template. The validator (`addItemWorkflowStatus`) only
+accepts step IDs in `workflowTemplate.workflowStepIds`, which is a subset.
+Picking a status template that exists in reference_data but isn't in the
+template returns `INVALID_STATUS_ID`. This is a known gap — `workflowStepIds`
+is not exposed on the workflow detail endpoint, so the node can only filter
+by typology, not by workflow template.
+
+Used internally by `getWorkflowStepTemplates`, `getWorkflowStates`,
+`getWorkflowStateReasons`, `getStepTemplateMilestones`, and the disabled-but-
+ready `getStatusMilestones` (paired with the commented-out milestones UX).
+
+### Get Task Reference Data (`GET /api/public/items/tasks/reference_data`)
+Operation value `getTask`. Returns the task templates available per typology
+(grouped by their workflow step) plus the fixed set of task statuses.
+
+**Response shape:**
+```ts
+{
+  typologies: [{
+    id: string,                       // e.g. "startup"
+    task_templates: [{
+      workflow_step_id: string,
+      workflow_step_label: string,
+      workflow_step_order: number,
+      id: string,                     // task template id (24-char hex)
+      title: string,
+      description: string,
+      mandatory: boolean,
+      order: number,
+    }],
+  }],
+  statuses: [
+    { id: 'pending',   label: 'Pending'   },
+    { id: 'completed', label: 'Completed' },
+    { id: 'overdue',   label: 'Overdue'   },
+  ],
+}
+```
+Server builds `task_templates` by walking each `WorkflowStep` in the
+typology's `WorkflowTemplate` and fanning out via `TaskTemplate.find({ workflowStepId })`,
+so the list is the per-typology template catalog — there's no separate
+"workflow-instance-specific" filter (similar to the Workflow reference_data
+caveat).
+
+Used internally by `getTaskTemplates` (both `listSearch` for Create and
+`loadOptions` for List filter).
 
 ---
 
@@ -359,8 +1221,62 @@ labels: '={{ JSON.stringify($value.split(",").map(v => v.trim()).filter(Boolean)
 
 ### listSearch methods (in `Bloomflow.node.ts`)
 - `getTypologies` — fetches `/api/public/items/reference_data`, flattens typologies
-- `searchItems` — fetches `/api/public/items?typology=[...]&limit=50`, requires typology
+- `searchItems` — fetches `/api/public/items?typology=[...]&limit=50`, requires `typology`
   to already be set in the current node parameters
+- `searchTargetItems` — same shape as `searchItems` but reads `targetTypology` instead
+  of `typology`. Used by the Ecosystem Create operation so the origin and target item
+  pickers can each filter by a different typology.
+- `searchRelations` — fetches `/api/public/items/{itemId}/ecosystem`, requires `itemId`
+  to already be set in the current node parameters. Extracts a 24-char hex ID from the
+  `itemId` resourceLocator value, then maps each relation to a display label of the form
+  `"{relationType label}: {origin.name} → {target.name} ({id})"`. Returns `[]` if no
+  itemId is selected yet.
+- `getRelationTypes` — fetches `/api/public/items/ecosystem/reference_data`, used by the
+  Ecosystem Create operation's `relationTypeId` picker. Filters by origin `typology`
+  when set, AND intersects with `targetTypology` when set (only returns relations whose
+  `targetTypologies[]` includes the chosen target). When neither is set, returns the
+  full deduplicated set of relation types across all typologies.
+- `getTargetTypologies` — fetches `/api/public/items/ecosystem/reference_data` AND
+  `/api/public/items/reference_data` in parallel. Used by the Ecosystem Create
+  operation's `targetTypology` picker. Returns the union of `availableRelations[].targetTypologies`
+  for the selected origin typology, with display names from items reference_data.
+  Origin typology comes from the UI `typology` field, or is derived from the item
+  (via `GET /api/public/items/{itemId}`) when typology is hidden. Falls back to all
+  typologies when origin typology is unknown.
+- `getWorkflowStepTemplates` — fetches `/api/public/items/workflows/reference_data`, used
+  by the Create Status operation's `stepTemplateId` picker. The response groups step
+  templates per typology (`typologies[].statuses[]`); if a `typology` is set in the
+  current node parameters, the list is filtered to that typology, otherwise it shows
+  the full deduplicated set across all typologies.
+- `searchWorkflows` — fetches `/api/public/items/{itemId}/workflows`. Requires `itemId`
+  to already be set in the current node parameters. Maps each workflow to a display
+  label of the form `"{current_status.name} / {current_state.name} ({id})"` so the
+  picker is meaningful when an item has multiple workflows. Returns `[]` if no itemId.
+- `searchWorkflowStatuses` — fetches `/api/public/items/{itemId}/workflows/{workflowId}`
+  and returns the `status[]` array. Requires both `itemId` and `workflowId` to be set.
+  Returns `[]` if either parent ID is unset.
+  **`id` vs `instanceId` gotcha:** the API's `cleanStatusOutput`
+  (public-api-helper.js ~line 371) exposes `id` as the workflow-step **template** id
+  and `instanceId` as the actual `CompanyWorkflowStep` id. The Get / Update Status
+  endpoints look up by `CompanyWorkflowStep.id`, so the picker uses `s.instanceId`
+  for the picker value (falling back to `s.id` if absent on older responses). Sending
+  `s.id` here would 404 with `UNKNOWN_STATUS`.
+- `searchNotes` — fetches `/api/public/items/{itemId}/notes`. Requires `itemId` to
+  already be set; returns `[]` otherwise. Maps each note to
+  `"{YYYY-MM-DD} — {first 60 chars of text} ({id})"`. Used by the Note Get and
+  Update operations' `noteId` picker.
+- `searchTasks` — fetches `/api/public/items/tasks?itemIds={itemId}&limit=100`.
+  Requires `itemId` to be set; returns `[]` otherwise. Unwraps `tasks[]` from the
+  paginated response and maps each task to `"[{status}] {title} — due {YYYY-MM-DD} ({id})"`.
+  Used by Task Get / Update / Complete / Cancel / Delete.
+- `getTaskTemplates` — fetches `/api/public/items/tasks/reference_data`, used by
+  Task Create's `taskTemplateId` picker. Same per-typology filter pattern as
+  `getWorkflowStepTemplates` (falls back to `deriveTypologyFromItem` when the UI
+  typology field is hidden). Each entry is displayed as
+  `"{workflow_step_label} › {title} ({id})"`. A separate
+  `loadOptions.getTaskTemplates` exists for the Task List multi-select filter —
+  same fetch + filter, returns `INodePropertyOptions[]` directly without the
+  resourceLocator wrapper.
 
 ### Item fields that are numeric-looking but typed as `string`
 `nb_employees`, `total_funding_usd`, `year_founded`, `etablissement_year_founded` — all
