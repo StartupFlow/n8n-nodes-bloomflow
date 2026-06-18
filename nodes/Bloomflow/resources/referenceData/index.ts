@@ -41,6 +41,19 @@ export const referenceDataDescription: INodeProperties[] = [
                 },
             },
             {
+                name: 'Get Task Reference Data',
+                value: 'getTask',
+                action: 'Get task reference data',
+                description:
+                    'Get reference data for tasks — lists task templates per typology (grouped by workflow step) and the set of task statuses (pending, completed, overdue)',
+                routing: {
+                    request: {
+                        method: 'GET',
+                        url: '/api/public/items/tasks/reference_data',
+                    },
+                },
+            },
+            {
                 name: 'Get Workflow Reference Data',
                 value: 'getWorkflow',
                 action: 'Get workflow reference data',
