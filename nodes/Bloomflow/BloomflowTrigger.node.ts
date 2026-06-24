@@ -109,7 +109,7 @@ export class BloomflowTrigger implements INodeType {
 						delete webhookData.secret;
 						return false;
 					}
-					throw error;
+					throw new NodeApiError(this.getNode(), error as JsonObject);
 				}
 
 				// If the user edited the Events list after registration, the stored
@@ -173,7 +173,7 @@ export class BloomflowTrigger implements INodeType {
 							'Webhooks are not enabled on this Bloomflow instance. Contact Bloomflow support to enable the webhooks feature.',
 						);
 					}
-					throw error;
+					throw new NodeApiError(this.getNode(), error as JsonObject);
 				}
 
 				if (!response?.id) {
