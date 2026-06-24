@@ -23,9 +23,17 @@ when the docs are ambiguous.
 
 ## Authentication
 - **Header:** `x-bflow-api-key: <apiKey>`
-- **Base URL:** Configurable per credential (`baseUrl`), default `https://trial.bloomflow.com`
-- **Credential test endpoint:** `GET /api/public/items/reference_data` (key-guarded, cheap GET)
+- **Base URL:** Configurable per credential (`baseUrl`), default `https://api.trial.bloomflow.com`
+- **Credential test endpoint:** `GET /api/public/items/reference_data` (key-guarded, cheap GET). This is the historical default; keys provisioned exclusively for the trigger node (no `public:items:*`) will see the test fail, but the credential still saves and the trigger node still works.
 - Default request headers: `Accept: application/json`, `Content-Type: application/json`
+
+### Scopes
+The Bloomflow API gates endpoints by scope on the API key. Each scope is granted by Bloomflow support per request.
+- `public:items:*` — Item, Document, Ecosystem, Note, Workflow, Task. Also required for any follow-up API calls a workflow makes after a trigger fires (e.g. `GET /api/public/items/{id}`).
+- `public:webhooks` — All webhook subscription endpoints (`POST /api/public/webhooks`, `GET /api/public/webhooks{,/:id}`, `DELETE /api/public/webhooks/:id`, `GET /api/public/webhooks/reference_data`). Required to register any Bloomflow Trigger.
+- `public:applications` — The Application surface only: `GET /application-forms`, `GET /application-forms/:id/reference_data`, `POST /application-forms/:id`, plus the deprecated `GET /applications/reference_data` and `POST /applications`. The public API does **not** expose a read endpoint for submitted applications. Not required to subscribe to or receive the `application.created` event.
+
+**Webhook delivery is NOT scope-gated.** `webhook-helper.js:550-561` (`getSubscriptionsByEvent`) only filters by event name — once a subscription exists, every matching event is delivered to it regardless of what scopes the registering key has. The scope only matters for the registration endpoints and for any follow-up API calls.
 
 ---
 
@@ -84,6 +92,14 @@ Can be extracted from a Bloomflow URL using the regex `/([a-f0-9]{24})/`.
 | Delete task | DELETE | `/api/public/tasks/{taskId}` |
 | Get task reference data | GET | `/api/public/items/tasks/reference_data` |
 | Get reference data | GET | `/api/public/items/reference_data` |
+| List webhook subscriptions | GET | `/api/public/webhooks` |
+| Get webhook subscription | GET | `/api/public/webhooks/{subscriptionId}` |
+| Create webhook subscription | POST | `/api/public/webhooks` |
+| Delete webhook subscription | DELETE | `/api/public/webhooks/{subscriptionId}` |
+| Webhook reference data | GET | `/api/public/webhooks/reference_data` |
+| List application forms | GET | `/api/public/application-forms` |
+| Application form reference data | GET | `/api/public/application-forms/{applicationFormId}/reference_data` |
+| Submit application | POST | `/api/public/application-forms/{applicationFormId}` |
 
 ---
 
@@ -1203,6 +1219,148 @@ caveat).
 
 Used internally by `getTaskTemplates` (both `listSearch` for Create and
 `loadOptions` for List filter).
+
+---
+
+## Resource: Webhook Trigger
+
+The Bloomflow Trigger node (`BloomflowTrigger.node.ts`) registers webhook
+subscriptions on workflow activation and removes them on deactivation. The
+events are defined as individual `INodePropertyOptions` files in
+`nodes/Bloomflow/triggers/` and aggregated via `triggers/index.ts`.
+
+### Supported events
+| Display name | API event ID |
+|--------------|--------------|
+| Application Created | `application.created` |
+| Item Created | `item.created` |
+| Item Deleted | `item.deleted` |
+| Item Property Change | `item.propertyChange` |
+| Item Workflow Step Advanced | `item.associationChange` |
+
+The on-screen name for `item.associationChange` is deliberately *Item
+Workflow Step Advanced* — the underlying API value still uses the legacy
+`item.associationChange` identifier, but the only thing that fires the event
+in the api-platform today is a new `CompanyWorkflowStep` row being created.
+
+**Delivery is not scope-gated.** Any registered subscription receives every
+matching event regardless of the key's scopes. The only auth check is on
+the subscription endpoints themselves (`public:webhooks`).
+
+**Event name matching uses a regex** (`webhook-helper.js:550-561`):
+`^${event.replace('.', '(\\[.*\\])?.')}$`. So subscribing to `item.created`
+will ALSO match typology-prefixed events of the form `item[startup].created`
+if the api-platform ever emits them. Today there are no such events in
+production, but the regex behaviour is worth noting if/when typology-scoped
+events ship.
+
+### Why no `workflow.propertyChange`
+The backend `workflow.propertyChange` event is **emitted from the same code
+path as `item.associationChange`** (`company-workflow-step.js:345-360`) and
+delivers under the same conditions (only on new step creation — see
+`webhook-helper.js:102-145`, the `getPayloadDataForWorkflow` helper returns
+`false` unless `action === CREATED`). Exposing both options would double the
+delivery for the same UI action. The node only registers
+`item.associationChange` because its payload includes the item ID and
+typology, while `workflow.propertyChange` only carries the workflow record
+ID. If the api-platform team broadens either event's emission, both should
+be re-exposed.
+
+### Subscription lifecycle
+- `checkExists` calls `GET /api/public/webhooks/{subscriptionId}`. A 404
+  clears the stored ID + secret so `create` runs. Any other error rethrows
+  so n8n surfaces it (no duplicate registrations on transient failures).
+  Also re-creates when the user edits the Events list and the remote
+  `events[]` no longer matches selection.
+- `create` calls `POST /api/public/webhooks` with the generated webhook URL,
+  the selected events, `enabled: true`, and a `securityConfig.headerValue`
+  containing a 32-byte hex secret. The response `id` and the secret are
+  persisted in `getWorkflowStaticData('node')`.
+- `delete` calls `DELETE /api/public/webhooks/{subscriptionId}`. 404 is
+  treated as success. **Any other failure logs a warning but does not throw**
+  — blocking workflow deactivation on a teardown 5xx leaves users unable to
+  delete their workflows. Orphaned subscriptions can be cleaned up via the
+  public API (`GET /api/public/webhooks` + `DELETE`).
+- The api-platform returns `404 UNKNOWN_FEATURE` from the create endpoint
+  when the workspace-level webhooks feature flag is off. The trigger node
+  detects this specific shape and rethrows a clearer message ("Webhooks are
+  not enabled on this Bloomflow instance — contact Bloomflow support").
+
+### Webhook payload verification
+Each delivery carries the `x-bloomflow-webhook-secret` header. The
+`webhook()` handler:
+1. **Fails closed** if `secret` is missing from workflow static data
+   (never registered, corrupted state, manual workflow edit) — returns
+   `500` with a hint to re-activate the workflow. n8n normally only routes
+   the webhook URL when the workflow is active, but defense in depth:
+   never reach downstream nodes with an unverified payload.
+2. Compares the header against the stored secret via `timingSafeEqual`
+   (constant-time, length-mismatch-safe).
+3. Returns `403 Invalid webhook signature` on mismatch, otherwise emits the
+   raw body as the workflow data.
+
+### Payload shapes
+Built by `webhook-helper.js` `formatDataToSend()`. The base `meta` envelope
+is `{ object, objectId, action, createdAt, retry, origin, fields }` — set
+respectively from per-event metadata, `getDefaultMetaOject()` (createdAt,
+retry, origin), and `postProcessObject()` (fields). All `item.*` events
+additionally include `objectLabel` (the item name at the time of the event);
+`workflow.propertyChange` and `application.created` do **not** include
+`objectLabel`. `item.associationChange` additionally includes `processId`
+and `processLabel` when the workflow lives on a partner-process item.
+Per-event current/previous specifics:
+
+- `item.created` / `item.propertyChange` — `meta.object = "item"`,
+  `current.id`, `current.bloomflowUrl`, `current.typologyId`, and the
+  changed fields. **Only fires for properties in `COMPANY_PROPERTIES_WATCHED`**
+  (`webhook-dict.js:61-95`): `name`, `website`, `pitch`, `description`,
+  `logo_url`, `year_founded`, `nb_employees`, `business_model`, `kpis`,
+  `painpoints`, SIRET/SIREN/NAF/legal_*, `business_opportunity`,
+  `sustainability`, `success_proofs`, `risks`, `key_differentiators`,
+  `competitors`, project dates, `marketIds`, `hq_*`, `links`, and `custom_*`
+  (prefix match). Tags, labels, and sources are NOT in this list.
+- `item.deleted` — `meta.object = "item"`, `previous.{id,name}`, empty
+  `current`. Smaller payload than the others.
+- `item.associationChange` — `meta.object = "item"`, `meta.objectId =
+  companyId`, `current.workflow = { id, step, label, comment }`, plus the
+  same item ID/bloomflowUrl/typologyId pair as `item.created`. Includes
+  `processId` / `processLabel` when the workflow lives on a partner-process
+  item. Fires **only on new `CompanyWorkflowStep` creation** — see
+  `getPayloadDataForWorkflow` filter above.
+- `application.created` — `meta.object = "application"`,
+  `current.{id, applicationFormId, name, pitch, submitted_by_name, submitted_by_email}`,
+  empty `previous`. Fires on `Application.create({ status: SUBMITTED })`
+  **and** on draft → submitted transitions (`application.js:100-112`).
+  The full `formData` is **not** included in the payload, and the public
+  API does **not** expose any GET-by-id route for applications — only
+  `POST /applications` (deprecated), `GET /applications/reference_data`
+  (deprecated), `GET /application-forms`,
+  `GET /application-forms/:id/reference_data`, and
+  `POST /application-forms/:id`. So custom fields submitted to the form
+  cannot be retrieved after the fact — they must be captured at
+  submission time if a downstream workflow needs them.
+
+### Retries
+- Retries are server-side via `WEBHOOK_SEND_MAX_RETRY` and
+  `WEBHOOK_SEND_DELAY` in `webhook-dict.js`. Don't hardcode the current
+  values (3 retries / 2-minute delay) in user-facing strings — they're
+  subject to change.
+- **`meta.retry` does not increment between retries.** `webhook-helper.js:24`
+  (`getDefaultMetaOject`) sets `retry: 0` once when the webhook run is
+  created; `webhook-run.js` re-sends the same `this.data` object on each
+  retry without mutating it. So the payload is **byte-for-byte identical**
+  on every retry, and clients cannot detect a re-delivery from the body.
+  Idempotency has to come from the downstream — dedupe on `meta.objectId`
+  + event type, or on a domain-level natural key inside `current`.
+
+### Implementation files
+- `nodes/Bloomflow/BloomflowTrigger.node.ts` — node class with the three
+  webhook lifecycle methods (`checkExists`, `create`, `delete`) and the
+  inbound `webhook()` handler with secret verification.
+- `nodes/Bloomflow/triggers/*.ts` — one `INodePropertyOptions` per event
+  (display name, value, description).
+- `nodes/Bloomflow/triggers/index.ts` — aggregates them into
+  `triggerEvents: INodePropertyOptions[]`.
 
 ---
 

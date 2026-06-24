@@ -16,8 +16,10 @@ export class BloomflowApi implements ICredentialType {
             displayName: 'Base URL',
             name: 'baseUrl',
             type: 'string',
-            default: 'https://trial.bloomflow.com',
-            description: 'The base URL of your Bloomflow instance.',
+            default: 'https://api.trial.bloomflow.com',
+            placeholder: 'https://api.your-instance.bloomflow.com',
+            description:
+                'The API host of your Bloomflow instance, in the form https://api.<your-instance>.bloomflow.com. The node appends /api/public/... automatically.',
             required: true,
         },
         {
@@ -40,6 +42,11 @@ export class BloomflowApi implements ICredentialType {
     test: ICredentialTestRequest = {
         request: {
             baseURL: '={{$credentials.baseUrl}}',
+            // /items/reference_data is the historical test endpoint — the bulk
+            // of node operations live under public:items:*. Keys provisioned
+            // exclusively for the Bloomflow Trigger (public:webhooks only)
+            // will see a red X here; the credential still saves and the
+            // trigger node still works.
             url: '/api/public/items/reference_data',
         },
     };
