@@ -19,7 +19,7 @@ export class BloomflowApi implements ICredentialType {
             default: 'https://api.trial.bloomflow.com',
             placeholder: 'https://api.your-instance.bloomflow.com',
             description:
-                'The API host of your Bloomflow instance, in the form https://api.<your-instance>.bloomflow.com. The node appends /api/public/... automatically.',
+                'The API host of your Bloomflow instance, in the form `https://api.<your-instance>.bloomflow.com`. The node appends `/api/public/...` automatically.',
             required: true,
         },
         {

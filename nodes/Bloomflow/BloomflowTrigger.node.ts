@@ -92,6 +92,7 @@ export class BloomflowTrigger implements INodeType {
 
 				const credentials = await this.getCredentials('bloomflowApi');
 				const selectedEvents = this.getNodeParameter('events') as string[];
+				const webhookUrl = this.getNodeWebhookUrl('default');
 
 				let response: IDataObject;
 				try {
@@ -112,14 +113,39 @@ export class BloomflowTrigger implements INodeType {
 					throw new NodeApiError(this.getNode(), error as JsonObject);
 				}
 
-				// If the user edited the Events list after registration, the stored
-				// subscription is filtering for the wrong set — force a re-create
-				// so server-side events match the node configuration.
+				// If the user edited the Events list or the n8n webhook URL has
+				// changed since registration (host migration, tunnel rotation), the
+				// remote subscription is out of sync. Update it in place via PUT so
+				// we keep the same subscriptionId + secret and avoid orphaning the
+				// old subscription (which would keep 403-spamming this URL).
 				const remoteEvents = Array.isArray(response.events) ? (response.events as string[]) : [];
-				if (!sameEventSet(remoteEvents, selectedEvents)) {
-					delete webhookData.subscriptionId;
-					delete webhookData.secret;
-					return false;
+				const remoteWebhookUrl = typeof response.webhookUrl === 'string' ? response.webhookUrl : '';
+				const eventsDiffer = !sameEventSet(remoteEvents, selectedEvents);
+				// getNodeWebhookUrl returns string | undefined; treat missing as
+				// "no comparison possible" rather than a drift signal (avoids sending
+				// undefined webhookUrl in the update payload).
+				const urlDiffers = !!webhookUrl && remoteWebhookUrl !== webhookUrl;
+
+				if (eventsDiffer || urlDiffers) {
+					const updateBody: IDataObject = {};
+					if (eventsDiffer) updateBody.events = selectedEvents;
+					if (urlDiffers) updateBody.webhookUrl = webhookUrl;
+
+					try {
+						await this.helpers.httpRequestWithAuthentication.call(this, 'bloomflowApi', {
+							method: 'PUT',
+							url: `${credentials.baseUrl as string}/api/public/webhooks/${subscriptionId}`,
+							body: updateBody,
+							json: true,
+						});
+					} catch (error) {
+						if ((error as { httpCode?: string }).httpCode === '404') {
+							delete webhookData.subscriptionId;
+							delete webhookData.secret;
+							return false;
+						}
+						throw new NodeApiError(this.getNode(), error as JsonObject);
+					}
 				}
 
 				return true;
@@ -165,8 +191,14 @@ export class BloomflowTrigger implements INodeType {
 					// The whole /webhooks surface is gated by a server-side feature
 					// flag — when it's off the API returns 404 UNKNOWN_FEATURE, which
 					// users typically misread as "URL wrong". Surface a clearer hint.
-					const apiError = error as { httpCode?: string; cause?: { error?: { error?: string } } };
-					const errorCode = apiError?.cause?.error?.error;
+					// httpRequestWithAuthentication wraps the AxiosError as
+					// NodeApiError.cause; the api-platform serialises errors via
+					// strong-error-handler as { error: { statusCode, name, message, code } }.
+					const apiError = error as {
+						httpCode?: string;
+						cause?: { response?: { data?: { error?: { code?: string } } } };
+					};
+					const errorCode = apiError?.cause?.response?.data?.error?.code;
 					if (apiError.httpCode === '404' && errorCode === 'UNKNOWN_FEATURE') {
 						throw new NodeOperationError(
 							this.getNode(),
@@ -207,13 +239,15 @@ export class BloomflowTrigger implements INodeType {
 					// Never block workflow deactivation on a teardown failure — a thrown
 					// error here can leave n8n unable to deactivate/delete the workflow.
 					// 404 means the subscription is already gone; for anything else
-					// (5xx, network) log a warning and let the user clean up server-side
-					// via the public API if it turns out the subscription stayed alive.
+					// (5xx, network) keep the local subscriptionId + secret so a later
+					// re-activation reuses the still-live remote subscription via
+					// checkExists instead of orphaning it and creating a duplicate.
 					const httpCode = (error as { httpCode?: string }).httpCode;
 					if (httpCode !== '404') {
 						this.logger.warn(
-							`Bloomflow Trigger: failed to delete subscription ${subscriptionId} (httpCode=${httpCode ?? 'unknown'}). The workflow will deactivate locally; if the subscription is still alive on Bloomflow, remove it via DELETE /api/public/webhooks/${subscriptionId}.`,
+							`Bloomflow Trigger: failed to delete subscription ${subscriptionId} (httpCode=${httpCode ?? 'unknown'}). The workflow will deactivate locally; local state is preserved so re-activation can reuse the subscription. If it must be removed server-side, use DELETE /api/public/webhooks/${subscriptionId}.`,
 						);
+						return true;
 					}
 				}
 
