@@ -8,6 +8,7 @@ Bloomflow is a deal-flow and portfolio management platform that helps organisati
 
 [Installation](#installation)
 [Operations](#operations)
+[Trigger](#trigger)
 [Credentials](#credentials)
 [Compatibility](#compatibility)
 [Usage](#usage)
@@ -104,6 +105,24 @@ Tasks attached to a workflow on an item (the Bloomflow API groups these as **Ite
 | **Get Task Reference Data** | List task templates per typology (grouped by workflow step) and the fixed set of task statuses (pending, completed, overdue). |
 | **Get Workflow Reference Data** | List workflow statuses (step templates with milestones) and states (with mandatoryness flags and predefined reason values) per typology. |
 
+## Trigger
+
+The **Bloomflow Trigger** node starts a workflow when one or more Bloomflow events occur. It registers a webhook subscription with Bloomflow on workflow activation and removes it on deactivation. Each delivery carries an `x-bloomflow-webhook-secret` header that the node verifies against a secret generated at registration time — unsigned or wrong-secret callbacks are rejected with `403`.
+
+| Event | Fires when |
+|-------|------------|
+| **Item Created** | A new item is created in Bloomflow. |
+| **Item Property Change** | A watched property on an item changes — name, website, pitch, descriptions, logo, year founded, employees, business model, HQ fields, links, and any `custom_*` field. Tag, label, source, and workflow changes do NOT fire this event. |
+| **Item Deleted** | An item is deleted. Payload only contains the deleted item's ID and name. |
+| **Item Workflow Step Advanced** | An item advances to a new step in its workflow (a new step record is created). Does NOT fire when the state, or other properties of the current step are edited, nor on tag/label/ecosystem changes. |
+| **Application Created** | A startup-form application is submitted (or transitions from `draft` to `submitted`). Payload includes `id`, `applicationFormId`, `name`, `pitch`, and submitter. The public API does not expose a read endpoint for the full submitted form — any custom fields you need downstream must be captured at submission time, not after the fact. |
+
+> **Scopes:** Only `public:webhooks` is required to register a Bloomflow Trigger and receive any event — webhook delivery is not scope-gated. Other scopes (`public:items:*`, `public:applications`) only matter for the regular API operations and any follow-up calls you make in the workflow.
+
+> Deliveries are retried by Bloomflow if your workflow returns a non-2xx response. The retried payload is byte-for-byte identical to the original — there's no per-delivery counter in the body — so workflows should be **idempotent**. Deduplicate downstream on `meta.objectId` plus the event type, or on a domain-level key from `current`.
+
+> Editing the Events list re-registers the subscription on the next activation, so the server-side filter always matches the node configuration.
+
 ## Credentials
 
 The Bloomflow Public API uses an API key passed as the `x-bflow-api-key` header. API keys are not self-service — they are issued by Bloomflow on request.
@@ -113,7 +132,17 @@ The Bloomflow Public API uses an API key passed as the `x-bflow-api-key` header.
    - **Base URL** — the host of your Bloomflow instance, in the form `https://api.<your-instance>.bloomflow.com` (per the [Bloomflow API docs](https://docs.bloomflow.com/docs/gettingstarted)). The node appends `/api/public/...` automatically.
    - **API Key** — the key provided by Bloomflow support (sent as `x-bflow-api-key`)
 
-The credential is verified by calling `GET /api/public/items/reference_data` on your instance — a key-guarded endpoint, so a successful test confirms the API key works for real operations.
+The credential is verified by calling `GET /api/public/items/reference_data` on your instance — a key-guarded endpoint, so a successful test confirms the API key reaches your instance with a valid scope. Keys provisioned without `public:items:*` (e.g. trigger-only keys) will see the test fail; the credential still saves and the trigger node still works.
+
+### Required scopes
+
+Different surfaces of the API need different scopes on the API key. Request the ones you need from Bloomflow support:
+
+| Scope | Needed for |
+|-------|------------|
+| `public:items:*` | Item, Document, Ecosystem, Note, Workflow, Task — and any follow-up calls you make from inside a Bloomflow Trigger workflow (e.g. `GET /api/public/items/{id}`) |
+| `public:webhooks` | Registering a Bloomflow Trigger of any event type. The webhook delivery itself is not scope-gated — any subscription will receive events that match its event list, regardless of other scopes. |
+| `public:applications` | The Application surface — listing application forms (`GET /api/public/application-forms`), reading a form's field schema (`GET /api/public/application-forms/{id}/reference_data`), and submitting an application (`POST /api/public/application-forms/{id}`). Not required to subscribe to or receive the `application.created` event. |
 
 ## Compatibility
 
@@ -137,6 +166,14 @@ When getting a single item you can identify it in three ways:
 - **Select from list** — search by name within a typology
 - **By ID** — enter the 24-character MongoDB ObjectID directly
 - **By URL** — paste a Bloomflow item URL; the ID is extracted automatically
+
+### Bloomflow Trigger — subscription lifecycle
+Activating a workflow with a Bloomflow Trigger registers a webhook subscription on your Bloomflow instance; deactivating it removes the subscription. If the removal fails (e.g. Bloomflow is unreachable at the time), the workflow still deactivates locally and a warning is logged — you can list and clean up server-side subscriptions via the public API:
+
+```
+GET    /api/public/webhooks
+DELETE /api/public/webhooks/{subscriptionId}
+```
 
 ### Create Document — URL vs File modes
 The Document → Create operation has a **Source** toggle:
