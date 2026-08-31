@@ -1,5 +1,5 @@
 {
-	"node": "@bloomflow/n8n-nodes-bloomflow.bloomflow",
+	"node": "@bloomflow/n8n-nodes-bloomflow.bloomflowTrigger",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Productivity", "Utility"],
@@ -15,7 +15,8 @@
 		"portfolio",
 		"scouting",
 		"pipeline",
-		"CRM"
+		"CRM",
+		"webhook"
 	],
 	"resources": {
 		"credentialDocumentation": [
@@ -25,7 +26,7 @@
 		],
 		"primaryDocumentation": [
 			{
-				"url": "https://github.com/StartupFlow/n8n-nodes-bloomflow?tab=readme-ov-file"
+				"url": "https://github.com/StartupFlow/n8n-nodes-bloomflow?tab=readme-ov-file#trigger"
 			}
 		]
 	}
