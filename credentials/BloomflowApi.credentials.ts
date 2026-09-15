@@ -9,7 +9,10 @@ import type {
 export class BloomflowApi implements ICredentialType {
     name = 'bloomflowApi';
     displayName = 'Bloomflow API';
-    icon: Icon = 'file:../nodes/Bloomflow/bloomflow.svg';
+    icon: Icon = {
+        light: 'file:../nodes/Bloomflow/bloomflow.svg',
+        dark: 'file:../nodes/Bloomflow/bloomflow.dark.svg',
+    };
     documentationUrl = 'https://github.com/startupflow/n8n-nodes-bloomflow#credentials';
     properties: INodeProperties[] = [
         {

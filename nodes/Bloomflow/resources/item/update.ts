@@ -309,8 +309,8 @@ export const itemUpdateDescription: INodeProperties[] = [
                 name: 'labels',
                 type: 'json',
                 default: '[]',
-                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
-                description: 'Array of label objects, e.g. <code>[{"id":"security"}]</code>',
+                placeholder: '["security"]',
+                description: 'Array of label names or identifiers',
                 routing: {
                     request: {
                         body: { labels: '={{ JSON.parse($value) }}' },
@@ -431,8 +431,8 @@ export const itemUpdateDescription: INodeProperties[] = [
                 name: 'sources',
                 type: 'json',
                 default: '[]',
-                // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
-                description: 'Array of source objects, e.g. <code>[{"id":"5e6fcc67820e9c012f765178"}]</code>',
+                placeholder: '["5e6fcc67820e9c012f765178"]',
+                description: 'Array of source names or identifiers',
                 routing: {
                     request: {
                         body: { sources: '={{ JSON.parse($value) }}' },
